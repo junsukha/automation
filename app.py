@@ -5,7 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-
+from utils import send_naver_report
 # 1. Page Configuration
 st.set_page_config(page_title="Academy Automation Agent", page_icon="🤖")
 
@@ -57,8 +57,14 @@ if st.button('🚀 Run Automation'):
         
         status.update(label="Sync Complete!", state="complete", expanded=False)
 
-    st.success("Automation finished successfully!")
-    
+    # Step 3: Send Report Email
+    report_content = f"The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
+    success = send_naver_report(user_email_id, user_app_pw, user_email_id, report_content)
+    if success:
+        st.success("Automation finished successfully and report email sent to your inbox!")
+    else:
+        st.error("Failed to send report email.")
+
     # Table Results
     st.subheader("Results")
     st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], use_container_width=True)
