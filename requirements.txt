@@ -1,0 +1,5 @@
+streamlit
+imap-tools
+selenium
+webdriver-manager
+python-dotenv

@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+.streamlit/config.toml
+.streamlit/secrets.toml
+uv.lock
+pyproject.toml
