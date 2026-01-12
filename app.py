@@ -36,6 +36,16 @@ user_email_id = st.text_input("Naver ID") # st.secrets["NAVER_ID"]
 # type="password" hides the characters as they type
 user_app_pw = st.text_input("Naver App Password", type="password") # st.secrets["NAVER_APP_PW"]
 
+if st.button("🔍 Check Login Only"):
+    try:
+        from imap_tools import MailBox
+        with MailBox('imap.naver.com').login(user_email_id, user_app_pw):
+            st.success("✅ Login Successful! IMAP is ready.")
+    except Exception as e:
+        st.error(f"❌ Login Failed. Check if IMAP is enabled in Naver settings.")
+        
+st.divider()
+
 if st.button('🚀 Run Automation'):
     # Validation: Ensure they didn't leave the fields empty
     if not user_email_id or not user_app_pw:
@@ -53,6 +63,7 @@ if st.button('🚀 Run Automation'):
         st.write("Connecting to ACA2000...")
         driver = get_driver()
         # driver.get("ACA2000_URL_HERE")
+        # student_list = get_students_from_aca2000(driver)  # Placeholder function
         time.sleep(2) # Placeholder
         
         status.update(label="Sync Complete!", state="complete", expanded=False)
@@ -67,4 +78,4 @@ if st.button('🚀 Run Automation'):
 
     # Table Results
     st.subheader("Results")
-    st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], use_container_width=True)
+    st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], width='stretch')
