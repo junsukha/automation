@@ -31,17 +31,22 @@ def get_driver():
 st.title("🤖 Academy Automation Agent")
 st.write("Sync Naver Emails with ACA2000.")
 
+st.subheader("🔑 Authentication")
+user_email_id = st.text_input("Naver ID") # st.secrets["NAVER_ID"]
+# type="password" hides the characters as they type
+user_app_pw = st.text_input("Naver App Password", type="password") # st.secrets["NAVER_APP_PW"]
+
 if st.button('🚀 Run Automation'):
-    # Check if secrets are configured
-    if "NAVER_ID" not in st.secrets:
-        st.error("Please configure your secrets in the Streamlit Dashboard!")
+    # Validation: Ensure they didn't leave the fields empty
+    if not user_email_id or not user_app_pw:
+        st.warning("Please enter both your Naver ID and App Password.")
         st.stop()
 
     with st.status("Agent is running...", expanded=True) as status:
         # Step 1: Read Emails
         st.write("Reading Naver emails...")
         # Note: We pass the credentials from st.secrets to your function
-        senders = get_all_senders_clean(st.secrets["NAVER_ID"], st.secrets["NAVER_PW"])
+        senders = get_all_senders_clean(user_email_id, user_app_pw)
         st.write(f"✅ Found {len(senders)} recent senders.")
 
         # Step 2: ACA2000 (Add your Selenium logic here later)
