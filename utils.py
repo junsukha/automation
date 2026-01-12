@@ -11,7 +11,10 @@ def send_naver_report(user_id, user_pw, recipient_email, report_text):
 
     # Connect to Naver SMTP server
     try:
-        with smtplib.SMTP_SSL('smtp.naver.com', 465) as smtp:
+        with smtplib.SMTP_SSL('smtp.naver.com', 587) as smtp:
+            smtp.ehlo()         # Identify yourself to the server
+            smtp.starttls()     # "Upgrade" the connection to secure encrypted TLS
+            smtp.ehlo()         # Re-identify over the secure connection
             smtp.login(user_id, user_pw)
             smtp.send_message(msg)
         return True
