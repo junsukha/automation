@@ -61,4 +61,4 @@ if st.button('🚀 Run Automation'):
     
     # Table Results
     st.subheader("Results")
-    st.table([{"Sender": s, "Status": "Processed"} for s in senders])
+    st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], use_container_width=True)
