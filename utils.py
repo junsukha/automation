@@ -189,12 +189,33 @@ def get_headless_driver():
     )
     return driver
 
-def login_to_naver():
+from selenium_stealth import stealth
+
+def get_headless_stealth_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+    driver = webdriver.Chrome(options=options)
+
+    # This is the magic part that hides the headless mode from Naver
+    stealth(driver,
+        languages=["en-US", "en"],
+        vendor="Google Inc.",
+        platform="Win32",
+        webgl_vendor="Intel Inc.",
+        renderer="Intel Iris OpenGL Engine",
+        fix_hairline=True,
+    )
+
+    return driver
+
+def login_to_naver(headless=True, naver_id=None, naver_passkey=None):
     # 1. Setup Chrome Options
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless") # Run without window (don't use for testing login)
-    
-    # driver = get_headless_driver() # Use this for headless mode
+
+    # driver = get_headless_stealth_driver() # Use this for headless mode
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), 
         options=options
@@ -209,11 +230,14 @@ def login_to_naver():
         id_input = wait.until(EC.element_to_be_clickable((By.NAME, "id")))
         
         # 2. Instead of time.sleep, use JS injection for safety on Naver
-        driver.execute_script("arguments[0].value = arguments[1];", id_input, NAVER_ID)
+        # check if naver_id and naver_passkey are defined
+        if not naver_id or not naver_passkey:
+            raise ValueError("NAVER_ID and NAVER_PW must be set before calling login_to_naver()")
+        driver.execute_script("arguments[0].value = arguments[1];", id_input, naver_id)
 
         # 3. Wait for PW input
         pw_input = wait.until(EC.element_to_be_clickable((By.NAME, "pw")))
-        driver.execute_script("arguments[0].value = arguments[1];", pw_input, NAVER_PW)
+        driver.execute_script("arguments[0].value = arguments[1];", pw_input, naver_passkey)
 
         # 4. Wait for and click Login Button
         login_btn = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
@@ -221,7 +245,8 @@ def login_to_naver():
 
         # 5. Verify login by waiting for a specific element on the HOME page
         # This confirms we are actually logged in before the script continues
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "MyView-module__my_info___Xm677")))
+        profile_btn = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "MyView-module__nickname___fcxwI")))
+        profile_btn.click()
         print("✅ Successfully logged in and redirected!")
 
     except Exception as e:
@@ -230,3 +255,9 @@ def login_to_naver():
     # Keeping the browser open for you to see the result
     input("Press Enter to close the browser...")
     driver.quit()
+    
+if __name__ == "__main__":
+    load_dotenv()
+    NAVER_ID = os.getenv("NAVER_ID")
+    NAVER_APP_PW = os.getenv("NAVER_APP_PW")
+    login_to_naver(naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
