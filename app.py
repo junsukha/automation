@@ -1,11 +1,11 @@
 import streamlit as st
 import time
-from my_email_script import get_all_senders_clean
+from utils import (get_all_senders_clean,
+                   send_naver_report,)
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from utils import send_naver_report
 # 1. Page Configuration
 st.set_page_config(page_title="Academy Automation Agent", page_icon="🤖")
 
@@ -61,21 +61,28 @@ if st.button('🚀 Run Automation'):
 
         # Step 2: ACA2000 (Add your Selenium logic here later)
         st.write("Connecting to ACA2000...")
-        driver = get_driver()
+        # driver = get_driver()
         # driver.get("ACA2000_URL_HERE")
         # student_list = get_students_from_aca2000(driver)  # Placeholder function
-        time.sleep(2) # Placeholder
-        
-        status.update(label="Sync Complete!", state="complete", expanded=False)
+        time.sleep(1)  # Placeholder
+        # Step 3: Send Report Email
+        report_content = f"The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
+        success = send_naver_report(user_email_id, user_app_pw, user_email_id, report_content)
+        if success:
+            st.write("✅ Email delivered successfully.")
+        else:
+            # We don't use st.error inside status because it might break the layout
+            st.write("⚠️ Email notification failed (Check settings).")
+            
+        status.update(label="All Tasks Complete!", state="complete", expanded=False)
 
-    # Step 3: Send Report Email
-    report_content = f"The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
-    success = send_naver_report(user_email_id, user_app_pw, user_email_id, report_content)
+    # This remains outside to give a clear final visual confirmation
     if success:
-        st.success("Automation finished successfully and report email sent to your inbox!")
+        st.success("Automation finished and report sent!")
+        st.balloons() # Optional fun effect for your user
     else:
-        st.error("Failed to send report email.")
-
+        st.warning("Automation finished, but we couldn't send the email.")
+        st.stop()
     # Table Results
     st.subheader("Results")
     st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], width='stretch')
