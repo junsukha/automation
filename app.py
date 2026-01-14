@@ -22,7 +22,7 @@ def get_driver():
     try:
         # Try local/standard path first
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    except:
+    except:  # noqa: E722
         # Fallback for Linux Server environment
         driver = webdriver.Chrome(options=options)
     return driver
@@ -42,7 +42,7 @@ if st.button("🔍 Check Login Only"):
         with MailBox('imap.naver.com').login(user_email_id, user_app_pw):
             st.success("✅ Login Successful! IMAP is ready.")
     except Exception as e:
-        st.error(f"❌ Login Failed. Check if IMAP is enabled in Naver settings.")
+        st.error("❌ Login Failed. Check if IMAP is enabled in Naver settings.")
         
 st.divider()
 
@@ -65,8 +65,9 @@ if st.button('🚀 Run Automation'):
         # driver.get("ACA2000_URL_HERE")
         # student_list = get_students_from_aca2000(driver)  # Placeholder function
         time.sleep(1)  # Placeholder
+        
         # Step 3: Send Report Email
-        report_content = f"The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
+        report_content = "The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
         success = send_naver_report(user_email_id, user_app_pw, user_email_id, report_content)
         if success:
             st.write("✅ Email delivered successfully.")
