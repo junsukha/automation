@@ -2,29 +2,29 @@
 from email.message import EmailMessage
 import streamlit as st
 
-# def send_naver_report(user_id, user_pw, recipient_email, report_text):
-#     msg = EmailMessage()
-#     msg.set_content(report_text)
-#     msg['Subject'] = '✅ [Academy Agent] Sync Report'
-#     msg['From'] = f"{user_id}@naver.com"
-#     msg['To'] = recipient_email
-
-#     # Connect to Naver SMTP server
-#     try:
-#         with smtplib.SMTP_SSL('smtp.naver.com', 587) as smtp:
-#             smtp.ehlo()         # Identify yourself to the server
-#             smtp.starttls()     # "Upgrade" the connection to secure encrypted TLS
-#             smtp.ehlo()         # Re-identify over the secure connection
-#             smtp.login(user_id, user_pw)
-#             smtp.send_message(msg)
-#         return True
-#     except Exception as e:
-#         st.error(f"Failed to send email: {e}")
-#         return False
-
 import smtplib
 import ssl
+    
+from imap_tools import MailBox, AND
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
 
+import os
+import time
+from dotenv import load_dotenv
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+
+# deprecated
 def send_naver_report(user_id, user_pw, recipient_user_id, report_text):
     """
     Sends an email report via Naver's SMTP server.
@@ -61,11 +61,17 @@ def send_naver_report(user_id, user_pw, recipient_user_id, report_text):
         st.error(f"Failed to send email: {e}")
         return False
     
-    
-from imap_tools import MailBox, AND
-from datetime import datetime, timedelta
 
 def get_all_senders_clean(user_id, user_pw): # Add parameters here
+    """
+    Fetches unique email senders from all folders in the Naver mailbox,
+    excluding Trash, Spam, and Drafts, for emails received in the last 7 days.
+    Parameters:
+        user_id (str): Naver email ID (without @naver.com).
+        user_pw (str): Naver email password or app password.
+    Returns:
+        set: A set of unique email senders.
+    """
     all_senders = set()
     date_limit = (datetime.now() - timedelta(days=7)).date()
 
@@ -85,26 +91,7 @@ def get_all_senders_clean(user_id, user_pw): # Add parameters here
     
     return all_senders
 
-import smtplib
-from email.mime.text import MIMEText
-# def send_email(send_email, send_passkey, receive_email):
-#     smtp_name = "smtp.naver.com"
-#     smtp_port = 587
 
-#     text = "hihi"
-
-#     msg = MIMEText(text)
-#     msg['Subject'] = "Test Email"
-#     msg['From'] = send_email
-#     msg['To'] = receive_email
-#     print(msg.as_string())
-
-#     s = smtplib.SMTP(smtp_name, smtp_port)
-#     s.starttls()
-#     s.login(send_email, send_passkey)
-#     s.sendmail(send_email, receive_email, msg.as_string())
-#     s.quit()
-    
 def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
     """
     Sends an email report via Naver's SMTP server.
@@ -143,55 +130,48 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         return False
     
     
-import os
-import time
-from dotenv import load_dotenv
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
-
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 
 
 def get_students_from_aca2000(driver):
+    # TODO: Implement actual logic to fetch student data from ACA2000
     # Placeholder function to simulate fetching student data
     return ["Student A", "Student B", "Student C"]
 
 
 
 
-def get_headless_driver():
-    options = Options()
+# def get_headless_driver():
+#     options = Options()
     
-    # The primary command for headless
-    options.add_argument("--headless=new") 
+#     # The primary command for headless
+#     options.add_argument("--headless=new") 
     
-    # Essential settings for servers/background stability
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
+#     # Essential settings for servers/background stability
+#     options.add_argument("--no-sandbox")
+#     options.add_argument("--disable-dev-shm-usage")
+#     options.add_argument("--disable-gpu")
     
-    # Optional: Set a window size so the "invisible" browser 
-    # doesn't default to a tiny mobile view
-    options.add_argument("--window-size=1920,1080")
+#     # Optional: Set a window size so the "invisible" browser 
+#     # doesn't default to a tiny mobile view
+#     options.add_argument("--window-size=1920,1080")
 
-    # Optional: Pretend to be a real user to avoid bot detection
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+#     # Optional: Pretend to be a real user to avoid bot detection
+#     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), 
-        options=options
-    )
-    return driver
+#     driver = webdriver.Chrome(
+#         service=Service(ChromeDriverManager().install()), 
+#         options=options
+#     )
+#     return driver
 
 from selenium_stealth import stealth
 
 def get_headless_stealth_driver():
+    """
+    Creates a headless Chrome WebDriver with stealth settings to avoid detection.
+    Returns:
+        webdriver.Chrome: Configured headless Chrome WebDriver.
+    """
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
@@ -211,14 +191,23 @@ def get_headless_stealth_driver():
 
     return driver
 
-def login_to_naver(headless=True, naver_id=None, naver_passkey=None):
+def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
+    """
+    Logs into Naver using Selenium WebDriver.
+    Parameters:
+        headless (bool): Whether to run the browser in headless mode.
+        naver_id (str): Naver login ID.
+        naver_passkey (str): Naver login password or app password.
+    """
     # 1. Setup Chrome Options
     options = webdriver.ChromeOptions()
 
-    # driver = get_headless_stealth_driver() # Use this for headless mode
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), 
-        options=options
+    if headless:
+        driver = get_headless_stealth_driver() # Use this for headless mode
+    else:
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), 
+            options=options
         )
     
     # Set a max wait time of 10 seconds
@@ -260,4 +249,4 @@ if __name__ == "__main__":
     load_dotenv()
     NAVER_ID = os.getenv("NAVER_ID")
     NAVER_APP_PW = os.getenv("NAVER_APP_PW")
-    login_to_naver(naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
