@@ -19,44 +19,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# deprecated
-def send_naver_report(user_id, user_pw, recipient_user_id, report_text):
-    """
-    Sends an email report via Naver's SMTP server.
-     Parameters:
-         user_id (str): Naver email ID (without @naver.com).
-         user_pw (str): Naver email password or app password.
-         recipient_user_id (str): Recipient's Naver email ID (without @naver.com).
-         report_text (str): The content of the email report.
-
-     Returns:
-         bool: True if email sent successfully, False otherwise.
-    """
-    msg = EmailMessage()
-    msg.set_content(report_text)
-    msg['Subject'] = '✅ Academy Sync Report'
-    msg['From'] = f"{user_id}@naver.com"
-    msg['To'] = f"{recipient_user_id}@naver.com"
-
-    context = ssl.create_default_context()
-
-    try:
-        # Use SMTP_SSL with port 465 (direct SSL connection)
-        with smtplib.SMTP_SSL('smtp.naver.com', 465, context=context, timeout=10) as smtp:
-            smtp.login(user_id, user_pw)
-            smtp.send_message(msg)
-        return True
-    except smtplib.SMTPAuthenticationError:
-        st.error("Authentication failed. Check your Naver ID and password.")
-        return False
-    except smtplib.SMTPException as e:
-        st.error(f"SMTP error occurred: {e}")
-        return False
-    except Exception as e:
-        st.error(f"Failed to send email: {e}")
-        return False
-    
-
 def get_all_senders_clean(user_id, user_pw): # Add parameters here
     """
     Fetches unique email senders from all folders in the Naver mailbox,
