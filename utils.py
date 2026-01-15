@@ -250,47 +250,77 @@ def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None
     oauth_url = msg_api.get_url_for_generating_code()
     print(f'[Kakao OAuth] Navigating to URL: {oauth_url}')
 
-    # # Alternative: Manual OAuth URL (requires kakao_id and kakao_pw for automation)
-    # oauth_url = (
-    #     f"https://kauth.kakao.com/oauth/authorize?"
-    #     f"client_id={rest_api_key}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
-    # )
-
     options = webdriver.ChromeOptions()
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get(oauth_url)
     wait = WebDriverWait(driver, 300)
+    
     try:
         # Try to find login form. If not present, skip login.
         try:
-            # id_input = wait.until(EC.presence_of_element_located((By.NAME, "loginId")), timeout=60)
-            # pw_input = wait.until(EC.presence_of_element_located((By.NAME, "password")), timeout=60)
-            id_input = wait.until(EC.presence_of_element_located((By.ID, "loginId--1")), timeout=60)
-            pw_input = wait.until(EC.presence_of_element_located((By.ID, "password--2")), timeout=60)
+            # Use name attribute or CSS selectors that are more stable
+            # Option 1: Find by name attribute
+            # Find by CSS selector that matches any ID starting with "loginId" or "password"
+            # id_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='loginId']")))
+            # pw_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='password']")))
+            
+            id_input = wait.until(EC.presence_of_element_located((By.NAME, "loginId")))
+            pw_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+            
+            
+            # Option 2: Find by CSS selector with partial ID match
+            # id_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id^='loginId']")), timeout=10)
+            # pw_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id^='password']")), timeout=10)
+            
             if kakao_id and kakao_pw:
-                driver.execute_script("arguments[0].value = arguments[1];", id_input, kakao_id)
-                driver.execute_script("arguments[0].value = arguments[1];", pw_input, kakao_pw)
-                login_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=60)
+                print("[Kakao OAuth] Filling in login credentials...")
+                
+                # Clear and fill the inputs
+                id_input.clear()
+                id_input.send_keys(kakao_id)
+                
+                pw_input.clear()
+                pw_input.send_keys(kakao_pw)
+                
+                time.sleep(1)  # Give the form a moment to register the input
+                
+                # Find and click the submit button
+                # login_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=10)
+                # login_btn.click()
+                login_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn_g.highlight.submit")))
                 login_btn.click()
-                time.sleep(2)
-                # input("Press Enter to close the browser...")
-        except Exception:
+
+                
+                print("[Kakao OAuth] Login button clicked, waiting for redirect...")
+                time.sleep(3)
+                
+        except Exception as e:
+            print(f"[Kakao OAuth] Login form not found or already logged in: {e}")
             pass  # Login form not present, already logged in
+        
         # Consent (if needed)
         try:
             consent_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=5)
             consent_btn.click()
+            print("[Kakao OAuth] Consent button clicked...")
             time.sleep(2)
         except Exception:
+            print("[Kakao OAuth] No consent needed or already granted")
             pass  # Consent may not be required if already granted
+        
         # Wait for redirect
+        print("[Kakao OAuth] Waiting for redirect...")
         wait.until(lambda d: redirect_uri in d.current_url)
         redirected_url = driver.current_url
+        
         parsed = urllib.parse.urlparse(redirected_url)
         code = urllib.parse.parse_qs(parsed.query).get('code', [None])[0]
+        
         print(f"[Kakao OAuth] Redirected URL: {redirected_url}")
         print(f"[Kakao OAuth] Extracted code: {code}")
+        
         return code
+        
     finally:
         driver.quit()
 
