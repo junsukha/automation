@@ -235,6 +235,7 @@ def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None
     Returns:
         str: The authorization code from the redirect URL
     """
+    from PyKakao import Message
     from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
@@ -244,31 +245,38 @@ def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None
     import time
     import urllib.parse
 
-    oauth_url = (
-        f"https://kauth.kakao.com/oauth/authorize?"
-        f"client_id={rest_api_key}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
-    )
+    # Use PyKakao to generate the OAuth URL (recommended)
+    msg_api = Message(service_key=rest_api_key)
+    oauth_url = msg_api.get_url_for_generating_code()
     print(f'[Kakao OAuth] Navigating to URL: {oauth_url}')
+
+    # # Alternative: Manual OAuth URL (requires kakao_id and kakao_pw for automation)
+    # oauth_url = (
+    #     f"https://kauth.kakao.com/oauth/authorize?"
+    #     f"client_id={rest_api_key}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
+    # )
 
     options = webdriver.ChromeOptions()
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get(oauth_url)
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 300)
     try:
         # Try to find login form. If not present, skip login.
-        # try:
-        #     id_input = wait.until(lambda d: d.find_elements(By.NAME, "loginKey") or d.find_elements(By.NAME, "password"), timeout=5)
-        #     if kakao_id and kakao_pw:
-        #         id_input = driver.find_element(By.NAME, "loginKey")
-        #         id_input.send_keys(kakao_id)
-        #         pw_input = driver.find_element(By.NAME, "password")
-        #         pw_input.send_keys(kakao_pw)
-        #         login_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        #         login_btn.click()
-        #         time.sleep(2)
-        # except Exception:
-        #     pass  # Login form not present, already logged in
-        # # Consent (if needed)
+        try:
+            # id_input = wait.until(EC.presence_of_element_located((By.NAME, "loginId")), timeout=60)
+            # pw_input = wait.until(EC.presence_of_element_located((By.NAME, "password")), timeout=60)
+            id_input = wait.until(EC.presence_of_element_located((By.ID, "loginId--1")), timeout=60)
+            pw_input = wait.until(EC.presence_of_element_located((By.ID, "password--2")), timeout=60)
+            if kakao_id and kakao_pw:
+                driver.execute_script("arguments[0].value = arguments[1];", id_input, kakao_id)
+                driver.execute_script("arguments[0].value = arguments[1];", pw_input, kakao_pw)
+                login_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=60)
+                login_btn.click()
+                time.sleep(2)
+                # input("Press Enter to close the browser...")
+        except Exception:
+            pass  # Login form not present, already logged in
+        # Consent (if needed)
         try:
             consent_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=5)
             consent_btn.click()
@@ -288,14 +296,14 @@ def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None
 
 if __name__ == "__main__":
     load_dotenv()
-    NAVER_ID = os.getenv("NAVER_ID")
-    NAVER_APP_PW = os.getenv("NAVER_APP_PW")
-    login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    # NAVER_ID = os.getenv("NAVER_ID")
+    # NAVER_APP_PW = os.getenv("NAVER_APP_PW")
+    # login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
-    # get_kakao_oauth_code_via_webdriver(
-    #     rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
-    #     redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
-    #     kakao_id=os.getenv("KAKAO_ID"),
-    #     kakao_pw=os.getenv("KAKAO_PW")
-    # )
+    get_kakao_oauth_code_via_webdriver(
+        rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
+        redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
+        kakao_id=os.getenv("KAKAO_ID"),
+        kakao_pw=os.getenv("KAKAO_PW")
+    )
