@@ -19,6 +19,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from selenium_stealth import stealth
+
+from PyKakao import Message  # Import PyKakao
+
 def get_all_senders_clean(user_id, user_pw): # Add parameters here
     """
     Fetches unique email senders from all folders in the Naver mailbox,
@@ -87,8 +91,6 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         return False
     
     
-
-
 def get_students_from_aca2000(driver):
     # TODO: Implement actual logic to fetch student data from ACA2000
     # Placeholder function to simulate fetching student data
@@ -121,7 +123,6 @@ def get_students_from_aca2000(driver):
 #     )
 #     return driver
 
-from selenium_stealth import stealth
 
 def get_headless_stealth_driver():
     """
@@ -202,8 +203,99 @@ def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
     input("Press Enter to close the browser...")
     driver.quit()
     
+def send_kakao_notification(api_key, redirect_url, message_text):
+    try:
+        msg_api = Message(service_key=api_key)
+        # Exchange the URL for a token
+        access_token = msg_api.get_access_token_by_redirected_url(redirect_url)
+        msg_api.set_access_token(access_token)
+        
+        # Send to "My Chatroom"
+        msg_api.send_message_to_me(
+            message_type="text",
+            text=message_text,
+            link={"web_url": "https://naver.com", "mobile_web_url": "https://naver.com"},
+            button_title="Check Report"
+        )
+        return True
+    except Exception as e:
+        st.error(f"Kakao Error: {e}")
+        return False
+    
+def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kakao_pw=None, scope="talk_message"):
+    """
+    Automate the Kakao OAuth login and consent flow to get the authorization code.
+    If already logged in, skips login and goes straight to consent/redirect.
+    Args:
+        rest_api_key (str): Kakao REST API Key
+        redirect_uri (str): Redirect URI registered in Kakao Developers
+        kakao_id (str): Kakao account ID (optional)
+        kakao_pw (str): Kakao account password (optional)
+        scope (str): OAuth scope (default: 'talk_message')
+    Returns:
+        str: The authorization code from the redirect URL
+    """
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    import time
+    import urllib.parse
+
+    oauth_url = (
+        f"https://kauth.kakao.com/oauth/authorize?"
+        f"client_id={rest_api_key}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
+    )
+    print(f'[Kakao OAuth] Navigating to URL: {oauth_url}')
+
+    options = webdriver.ChromeOptions()
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.get(oauth_url)
+    wait = WebDriverWait(driver, 20)
+    try:
+        # Try to find login form. If not present, skip login.
+        # try:
+        #     id_input = wait.until(lambda d: d.find_elements(By.NAME, "loginKey") or d.find_elements(By.NAME, "password"), timeout=5)
+        #     if kakao_id and kakao_pw:
+        #         id_input = driver.find_element(By.NAME, "loginKey")
+        #         id_input.send_keys(kakao_id)
+        #         pw_input = driver.find_element(By.NAME, "password")
+        #         pw_input.send_keys(kakao_pw)
+        #         login_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        #         login_btn.click()
+        #         time.sleep(2)
+        # except Exception:
+        #     pass  # Login form not present, already logged in
+        # # Consent (if needed)
+        try:
+            consent_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=5)
+            consent_btn.click()
+            time.sleep(2)
+        except Exception:
+            pass  # Consent may not be required if already granted
+        # Wait for redirect
+        wait.until(lambda d: redirect_uri in d.current_url)
+        redirected_url = driver.current_url
+        parsed = urllib.parse.urlparse(redirected_url)
+        code = urllib.parse.parse_qs(parsed.query).get('code', [None])[0]
+        print(f"[Kakao OAuth] Redirected URL: {redirected_url}")
+        print(f"[Kakao OAuth] Extracted code: {code}")
+        return code
+    finally:
+        driver.quit()
+
 if __name__ == "__main__":
     load_dotenv()
     NAVER_ID = os.getenv("NAVER_ID")
     NAVER_APP_PW = os.getenv("NAVER_APP_PW")
     login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    
+    # test kakao OAuth
+    # get_kakao_oauth_code_via_webdriver(
+    #     rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
+    #     redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
+    #     kakao_id=os.getenv("KAKAO_ID"),
+    #     kakao_pw=os.getenv("KAKAO_PW")
+    # )
