@@ -66,17 +66,6 @@ kakao_api_key = st.text_input("Kakao REST API Key", type="password")
 kakao_registered_redirect_url = st.text_input("Kakao Redirect URL", help="The Redirect URL you set in Kakao Developers (e.g., https://localhost:5000/)")
 kakao_id = st.text_input("Kakao Login ID (Email or Phone)")
 kakao_pw = st.text_input("Kakao Login Password", type="password")
-# below will be replaced with automation
-# if kakao_api_key:
-#     # We initialize just to get the URL
-#     temp_api = Message(service_key=kakao_api_key)
-#     kakao_auth_url = temp_api.get_url_for_generating_code()
-    
-#     st.info("To enable Kakao alerts, follow these two steps:")
-#     st.markdown(f"1. [**Click here to Login to Kakao**]({kakao_auth_url})")
-#     kakao_redirect_url = st.text_input("2. Paste the URL of the page you were redirected to:")
-# else:
-#     st.caption("Leave API Key blank to skip Kakao notifications.")
 
 st.divider()
 
