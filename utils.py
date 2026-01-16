@@ -24,6 +24,69 @@ from selenium_stealth import stealth
 from PyKakao import Message  # Import PyKakao
 
 import time
+from contextlib import contextmanager
+
+@contextmanager
+def get_driver_context(headless=False, stealth=False):
+    """
+    Context manager for WebDriver that ensures proper cleanup.
+    
+    Usage:
+        with get_driver_context(headless=True) as driver:
+            driver.get("https://example.com")
+            # driver is automatically closed when exiting the context
+    
+    Args:
+        headless (bool): Whether to run in headless mode
+        stealth (bool): Whether to use stealth mode (for headless)
+    
+    Yields:
+        webdriver.Chrome: Configured Chrome WebDriver
+    """
+    driver = None
+    try:
+        if headless:
+            if stealth:
+                driver = get_headless_stealth_driver()
+            else:
+                options = webdriver.ChromeOptions()
+                options.add_argument("--headless=new")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--disable-software-rasterizer")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-background-timer-throttling")
+                options.add_argument("--disable-backgrounding-occluded-windows")
+                options.add_argument("--disable-renderer-backgrounding")
+                options.add_argument("--disable-features=TranslateUI")
+                options.add_argument("--disable-ipc-flooding-protection")
+                driver = webdriver.Chrome(
+                    service=Service(ChromeDriverManager().install()),
+                    options=options
+                )
+        else:
+            options = webdriver.ChromeOptions()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-software-rasterizer")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-backgrounding-occluded-windows")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("--disable-features=TranslateUI")
+            options.add_argument("--disable-ipc-flooding-protection")
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=options
+            )
+        yield driver
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass  # Ignore errors during cleanup
 
 def get_all_senders_clean(user_id, user_pw): # Add parameters here
     """
@@ -93,7 +156,7 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         return False
     
     
-def get_students_from_aca2000(driver):
+def get_students_from_aca2000():
     # TODO: Implement actual logic to fetch student data from ACA2000
     # Placeholder function to simulate fetching student data
     return ["Student A", "Student B", "Student C"]
