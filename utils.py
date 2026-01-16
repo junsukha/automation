@@ -23,6 +23,8 @@ from selenium_stealth import stealth
 
 from PyKakao import Message  # Import PyKakao
 
+import time
+
 def get_all_senders_clean(user_id, user_pw): # Add parameters here
     """
     Fetches unique email senders from all folders in the Naver mailbox,
@@ -228,6 +230,10 @@ def send_kakao_notification(api_key, kakao_registered_redirect_url, message_text
             link={"web_url": "https://naver.com", "mobile_web_url": "https://naver.com"},
             button_title="Check Report"
         )
+        
+        # close msg_api session if needed
+        # msg_api.close()
+        
         return True
     except Exception as e:
         st.error(f"Kakao Error: {e}")
@@ -249,15 +255,7 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
     Returns:
         str: The authorization code from the redirect URL
     """
-    from PyKakao import Message
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
-    import time
-    import urllib.parse
+
 
     # Use PyKakao to generate the OAuth URL (recommended)
     msg_api = Message(service_key=rest_api_key)
@@ -336,6 +334,8 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
         print(f"[Kakao OAuth] Redirected URL: {redirected_url}")
         print(f"[Kakao OAuth] Extracted code: {access_token}")
         
+        # kill or close the driver
+        driver.quit()
 
         return access_token
         
