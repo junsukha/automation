@@ -1,7 +1,9 @@
 import streamlit as st
 import time
-from utils import (get_all_senders_clean, send_kakao_notification,
-                   send_naver_report,)
+from utils import (get_all_senders_clean, 
+                   send_kakao_notification,
+                   send_naver_report,
+                   get_students_from_aca2000,)
 # Selenium imports - uncomment when get_driver() is used
 # from selenium import webdriver
 # from selenium.webdriver.chrome.service import Service
@@ -48,6 +50,13 @@ if st.button('🚀 Run Automation'):
     if not user_email_id or not user_app_pw:
         st.warning("Please enter both your Naver ID and App Password.")
         st.stop()
+    # Also check kakao ID and password
+    if not kakao_id or not kakao_pw:
+        st.warning("Please enter both your Kakao ID and Password.")
+        st.stop()
+    if not kakao_api_key or not kakao_registered_redirect_url:
+        st.warning("Please enter both your Kakao API Key and Redirect URL.")
+        st.stop()
 
     # Initialize variables to avoid scope issues
     success = False
@@ -61,15 +70,14 @@ if st.button('🚀 Run Automation'):
             senders = get_all_senders_clean(user_email_id, user_app_pw)
             st.write(f"✅ Found {len(senders)} recent senders.")
 
-            # Step 2: ACA2000 (Add your Selenium logic here later)
+            # Step 2: TODO:ACA2000 (Add your Selenium logic here later)
             st.write("Connecting to ACA2000...")
-            # driver = get_driver()
-            # try:
-            #     driver.get("ACA2000_URL_HERE")
-            #     student_list = get_students_from_aca2000(driver)  # Placeholder function
-            # finally:
-            #     driver.quit()  # Always cleanup driver
-            time.sleep(1)  # Placeholder
+            try:
+                student_list = get_students_from_aca2000()  # Placeholder function
+            except Exception as e:
+                st.error(f"❌ An error occurred during ACA2000 connection: {e}")
+                st.exception(e)
+                st.stop()
             
             # Step 3: Send Report Email
             report_content = "The Academy Agent has finished syncing.\n\nNames processed:\n" + "\n".join(senders)
