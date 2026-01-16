@@ -136,6 +136,17 @@ def get_headless_stealth_driver():
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    # Options to prevent zombie processes
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-features=TranslateUI")
+    options.add_argument("--disable-ipc-flooding-protection")
 
     driver = webdriver.Chrome(options=options)
 
@@ -161,6 +172,17 @@ def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
     """
     # 1. Setup Chrome Options
     options = webdriver.ChromeOptions()
+    
+    # Options to prevent zombie processes
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-features=TranslateUI")
+    options.add_argument("--disable-ipc-flooding-protection")
 
     if headless:
         driver = get_headless_stealth_driver() # Use this for headless mode
@@ -263,6 +285,18 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
     print(f'[Kakao OAuth] Navigating to URL: {oauth_url}')
 
     options = webdriver.ChromeOptions()
+    
+    # Options to prevent zombie processes
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-features=TranslateUI")
+    options.add_argument("--disable-ipc-flooding-protection")
+    
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get(oauth_url)
     wait = WebDriverWait(driver, 300)
