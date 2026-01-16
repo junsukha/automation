@@ -1,11 +1,14 @@
 import streamlit as st
 import time
-from utils import (get_all_senders_clean,
+from utils import (get_all_senders_clean, send_kakao_notification,
                    send_naver_report,)
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+
+from PyKakao import Message  # Import PyKakao
+
 # 1. Page Configuration
 st.set_page_config(page_title="Academy Automation Agent", page_icon="🤖")
 
@@ -29,21 +32,52 @@ def get_driver():
 
 # 3. Main UI
 st.title("🤖 Academy Automation Agent")
-st.write("Sync Naver Emails with ACA2000.")
+st.write("Sync Naver Emails with ACA2000 and get notifications via KakaoTalk.")
 
-st.subheader("🔑 Authentication")
-user_email_id = st.text_input("Naver ID") # st.secrets["NAVER_ID"]
-# type="password" hides the characters as they type
-user_app_pw = st.text_input("Naver App Password", type="password") # st.secrets["NAVER_APP_PW"]
+# Section 1: Naver
+st.header("📧 1. Naver Configuration")
+col1, col2 = st.columns(2)
+with col1:
+    user_email_id = st.text_input("Naver ID", placeholder="without @naver.com")
+with col2:
+    user_app_pw = st.text_input("Naver App Password", type="password", help="Use a 16-digit App Password, not your login PW.")
 
-if st.button("🔍 Check Login Only"):
+if st.button("🔍 Test Naver Login"):
     try:
         from imap_tools import MailBox
         with MailBox('imap.naver.com').login(user_email_id, user_app_pw):
-            st.success("✅ Login Successful! IMAP is ready.")
+            st.success("✅ Naver IMAP Ready!")
     except Exception as e:
-        st.error("❌ Login Failed. Check if IMAP is enabled in Naver settings.")
-        
+        st.error(f"❌ Login Failed. Check ID/App PW. {e}")
+
+st.divider()
+
+# st.write("Sync Naver Emails with ACA2000.")
+
+# st.subheader("🔑 Authentication")
+# user_email_id = st.text_input("Naver ID") # st.secrets["NAVER_ID"]
+# # type="password" hides the characters as they type
+# user_app_pw = st.text_input("Naver App Password", type="password") # st.secrets["NAVER_APP_PW"]
+
+# Section 2: KakaoTalk (Right below Naver)
+# Ask for Kakao REST API Key and Redirect URL from Kakao Developers
+st.header("💬 2. KakaoTalk Notification (Optional)")
+kakao_api_key = st.text_input("Kakao REST API Key", type="password")
+kakao_registered_redirect_url = st.text_input("Kakao Redirect URL", help="The Redirect URL you set in Kakao Developers (e.g., https://localhost:5000/)")
+kakao_id = st.text_input("Kakao Login ID (Email or Phone)")
+kakao_pw = st.text_input("Kakao Login Password", type="password")
+# below will be replaced with automation
+# if kakao_api_key:
+#     # We initialize just to get the URL
+#     temp_api = Message(service_key=kakao_api_key)
+#     kakao_auth_url = temp_api.get_url_for_generating_code()
+    
+#     st.info("To enable Kakao alerts, follow these two steps:")
+#     st.markdown(f"1. [**Click here to Login to Kakao**]({kakao_auth_url})")
+#     kakao_redirect_url = st.text_input("2. Paste the URL of the page you were redirected to:")
+# else:
+#     st.caption("Leave API Key blank to skip Kakao notifications.")
+
 st.divider()
 
 if st.button('🚀 Run Automation'):
@@ -75,8 +109,20 @@ if st.button('🚀 Run Automation'):
             # We don't use st.error inside status because it might break the layout
             st.write("⚠️ Email notification failed (Check settings).")
             
-        status.update(label="All Tasks Complete!", state="complete", expanded=False)
+ 
 
+        # Step 4: Send KakaoTalk Message if Configured
+        st.write("Sending report to KakaoTalk...")
+        kakao_success = send_kakao_notification(kakao_api_key, 
+                                                kakao_registered_redirect_url, report_content, kakao_id, kakao_pw)
+        if kakao_success:
+            st.write("✅ Kakao message sent!")
+        else:
+            st.write("⚠️ Kakao message failed (Check API key and redirect URL).")
+       
+            
+        status.update(label="All Tasks Complete!", state="complete", expanded=False)
+        
     # This remains outside to give a clear final visual confirmation
     if success:
         st.success("Automation finished and report sent!")
@@ -84,6 +130,7 @@ if st.button('🚀 Run Automation'):
     else:
         st.warning("Automation finished, but we couldn't send the email.")
         st.stop()
+        
     # Table Results
     st.subheader("Results")
     st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], width='stretch')

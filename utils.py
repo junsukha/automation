@@ -203,11 +203,22 @@ def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
     input("Press Enter to close the browser...")
     driver.quit()
     
-def send_kakao_notification(api_key, redirect_url, message_text):
+def send_kakao_notification(api_key, kakao_registered_redirect_url, message_text, kakao_id=None, kakao_pw=None):
     try:
+        # Initialize Kakao Message API
         msg_api = Message(service_key=api_key)
+
+        # automate OAuth login and get token to send message
+        access_token = get_kakao_token_via_webdriver(
+            rest_api_key=api_key,
+            kakao_registered_redirect_url=kakao_registered_redirect_url,
+            kakao_id=kakao_id,
+            kakao_pw=kakao_pw
+            )
         # Exchange the URL for a token
-        access_token = msg_api.get_access_token_by_redirected_url(redirect_url)
+        # access_token = msg_api.get_access_token_by_redirected_url(redirect_url)
+        
+        # set token to message API
         msg_api.set_access_token(access_token)
         
         # Send to "My Chatroom"
@@ -222,10 +233,13 @@ def send_kakao_notification(api_key, redirect_url, message_text):
         st.error(f"Kakao Error: {e}")
         return False
     
-def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kakao_pw=None, scope="talk_message"):
+def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kakao_pw=None, scope="talk_message"):
     """
     Automate the Kakao OAuth login and consent flow to get the authorization code.
     If already logged in, skips login and goes straight to consent/redirect.
+    
+    Flow: oauth_url -> (login) -> (consent) -> redirect_uri with code token -> code token extraction -> return code token which will be used to send message
+    
     Args:
         rest_api_key (str): Kakao REST API Key
         redirect_uri (str): Redirect URI registered in Kakao Developers
@@ -313,13 +327,17 @@ def get_kakao_oauth_code_via_webdriver(rest_api_key, redirect_uri, kakao_id=None
         wait.until(lambda d: redirect_uri in d.current_url)
         redirected_url = driver.current_url
         
-        parsed = urllib.parse.urlparse(redirected_url)
-        code = urllib.parse.parse_qs(parsed.query).get('code', [None])[0]
+        # parse the redirected URL to extract the access token
+        access_token = msg_api.get_access_token_by_redirected_url(redirected_url)
+
+        # parsed = urllib.parse.urlparse(redirected_url)
+        # code = urllib.parse.parse_qs(parsed.query).get('code', [None])[0]
         
         print(f"[Kakao OAuth] Redirected URL: {redirected_url}")
-        print(f"[Kakao OAuth] Extracted code: {code}")
+        print(f"[Kakao OAuth] Extracted code: {access_token}")
         
-        return code
+
+        return access_token
         
     finally:
         driver.quit()
@@ -331,7 +349,7 @@ if __name__ == "__main__":
     # login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
-    get_kakao_oauth_code_via_webdriver(
+    get_kakao_token_via_webdriver(
         rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
         redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
         kakao_id=os.getenv("KAKAO_ID"),
