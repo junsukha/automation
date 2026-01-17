@@ -26,6 +26,27 @@ from PyKakao import Message  # Import PyKakao
 import time
 from contextlib import contextmanager
 
+def _notify_user(message, message_type="error"):
+    """
+    Safely notify user using Streamlit if available, otherwise use print.
+    
+    Args:
+        message (str): Message to display
+        message_type (str): Type of message - "error", "success", "warning", or "info"
+    """
+    try:
+        if message_type == "error":
+            st.error(message)
+        elif message_type == "success":
+            st.success(message)
+        elif message_type == "warning":
+            st.warning(message)
+        else:
+            st.info(message)
+    except Exception:
+        # Streamlit not available or not in proper context, use print
+        print(message)
+
 @contextmanager
 def get_driver_context(headless=False, stealth=False):
     """
@@ -152,7 +173,7 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         s.quit()
         return True
     except Exception as e:
-        st.error(f"Email error: {e}")
+        _notify_user(f"Email error: {e}", "error")
         return False
     
     
@@ -225,7 +246,8 @@ def get_headless_stealth_driver():
 
     return driver
 
-def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
+# test using webdriver before implementing aca2000 logics
+def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=None):
     """
     Logs into Naver using Selenium WebDriver.
     Parameters:
@@ -233,62 +255,63 @@ def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
     """
-    # 1. Setup Chrome Options
-    options = webdriver.ChromeOptions()
+    # # 1. Setup Chrome Options
+    # options = webdriver.ChromeOptions()
     
-    # Options to prevent zombie processes
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-features=TranslateUI")
-    options.add_argument("--disable-ipc-flooding-protection")
+    # # Options to prevent zombie processes
+    # options.add_argument("--no-sandbox")
+    # options.add_argument("--disable-dev-shm-usage")
+    # options.add_argument("--disable-software-rasterizer")
+    # options.add_argument("--disable-extensions")
+    # options.add_argument("--disable-background-timer-throttling")
+    # options.add_argument("--disable-backgrounding-occluded-windows")
+    # options.add_argument("--disable-renderer-backgrounding")
+    # options.add_argument("--disable-features=TranslateUI")
+    # options.add_argument("--disable-ipc-flooding-protection")
 
-    if headless:
-        driver = get_headless_stealth_driver() # Use this for headless mode
-    else:
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), 
-            options=options
-        )
+    # if headless:
+    #     driver = get_headless_stealth_driver() # Use this for headless mode
+    # else:
+    #     driver = webdriver.Chrome(
+    #         service=Service(ChromeDriverManager().install()), 
+    #         options=options
+    #     )
     
-    # Set a max wait time of 10 seconds
-    wait = WebDriverWait(driver, 10)
-    try:
-        driver.get("https://nid.naver.com/nidlogin.login")
+    with get_driver_context(headless=headless, stealth=stealth) as driver:
+        # Set a max wait time of 10 seconds
+        wait = WebDriverWait(driver, 10)
+        try:
+            driver.get("https://nid.naver.com/nidlogin.login")
 
-        # 1. Wait until the ID input is actually clickable
-        id_input = wait.until(EC.element_to_be_clickable((By.NAME, "id")))
-        
-        # 2. Instead of time.sleep, use JS injection for safety on Naver
-        # check if naver_id and naver_passkey are defined
-        if not naver_id or not naver_passkey:
-            raise ValueError("NAVER_ID and NAVER_PW must be set before calling login_to_naver()")
-        driver.execute_script("arguments[0].value = arguments[1];", id_input, naver_id)
+            # 1. Wait until the ID input is actually clickable
+            id_input = wait.until(EC.element_to_be_clickable((By.NAME, "id")))
+            
+            # 2. Instead of time.sleep, use JS injection for safety on Naver
+            # check if naver_id and naver_passkey are defined
+            if not naver_id or not naver_passkey:
+                _notify_user("❌ NAVER_ID and NAVER_PW must be set before calling login_to_naver()", "error")
+                return False
+            driver.execute_script("arguments[0].value = arguments[1];", id_input, naver_id)
 
-        # 3. Wait for PW input
-        pw_input = wait.until(EC.element_to_be_clickable((By.NAME, "pw")))
-        driver.execute_script("arguments[0].value = arguments[1];", pw_input, naver_passkey)
+            # 3. Wait for PW input
+            pw_input = wait.until(EC.element_to_be_clickable((By.NAME, "pw")))
+            driver.execute_script("arguments[0].value = arguments[1];", pw_input, naver_passkey)
 
-        # 4. Wait for and click Login Button
-        login_btn = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
-        login_btn.click()
+            # 4. Wait for and click Login Button
+            login_btn = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
+            login_btn.click()
 
-        # 5. Verify login by waiting for a specific element on the HOME page
-        # This confirms we are actually logged in before the script continues
-        profile_btn = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "MyView-module__nickname___fcxwI")))
-        profile_btn.click()
-        print("✅ Successfully logged in and redirected!")
+            # 5. Verify login by waiting for a specific element on the HOME page
+            # This confirms we are actually logged in before the script continues
+            profile_btn = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "MyView-module__nickname___fcxwI")))
+            profile_btn.click()
+            print("✅ Successfully logged in and redirected!")
 
-    except Exception as e:
-        print(f"❌ Automation timed out or failed: {e}")
-        driver.save_screenshot("debug_timeout.png")
-    # Keeping the browser open for you to see the result
-    input("Press Enter to close the browser...")
-    driver.quit()
+        except Exception as e:
+            print(f"❌ Automation timed out or failed: {e}")
+            driver.save_screenshot("debug_timeout.png")
+        # Keeping the browser open for you to see the result
+        input("Press Enter to close the browser...")
     
 def send_kakao_notification(api_key, kakao_registered_redirect_url, message_text, kakao_id=None, kakao_pw=None):
     try:
@@ -321,7 +344,7 @@ def send_kakao_notification(api_key, kakao_registered_redirect_url, message_text
         
         return True
     except Exception as e:
-        st.error(f"Kakao Error: {e}")
+        _notify_user(f"Kakao Error: {e}", "error")
         return False
     
 def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kakao_pw=None, scope="talk_message"):
@@ -441,14 +464,14 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
 
 if __name__ == "__main__":
     load_dotenv()
-    # NAVER_ID = os.getenv("NAVER_ID")
-    # NAVER_APP_PW = os.getenv("NAVER_APP_PW")
-    # login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    NAVER_ID = os.getenv("NAVER_ID")
+    NAVER_APP_PW = os.getenv("NAVER_APP_PW")
+    login_to_naver(headless=False, naver_id=None, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
-    get_kakao_token_via_webdriver(
-        rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
-        redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
-        kakao_id=os.getenv("KAKAO_ID"),
-        kakao_pw=os.getenv("KAKAO_PW")
-    )
+    # get_kakao_token_via_webdriver(
+    #     rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
+    #     redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
+    #     kakao_id=os.getenv("KAKAO_ID"),
+    #     kakao_pw=os.getenv("KAKAO_PW")
+    # )
