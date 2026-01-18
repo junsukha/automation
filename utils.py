@@ -11,6 +11,15 @@ from email.mime.text import MIMEText
 
 import os
 from dotenv import load_dotenv
+try:
+    import toml
+except ImportError:
+    # Fallback: try tomllib (Python 3.11+) or use simple parsing
+    try:
+        import tomllib
+        toml = tomllib
+    except ImportError:
+        toml = None
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -25,6 +34,44 @@ from PyKakao import Message  # Import PyKakao
 
 import time
 from contextlib import contextmanager
+
+def _load_secrets_toml():
+    """
+    Load secrets from .streamlit/secrets.toml when running outside Streamlit.
+    Returns a dictionary of secrets, or empty dict if file not found.
+    """
+    secrets = {}
+    try:
+        secrets_path = os.path.join(os.path.dirname(__file__), '.streamlit', 'secrets.toml')
+        if os.path.exists(secrets_path):
+            with open(secrets_path, 'r', encoding='utf-8') as f:
+                if toml:
+                    secrets = toml.load(f)
+                else:
+                    # Simple fallback: parse as key-value pairs (basic TOML)
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip().strip('"').strip("'")
+                            secrets[key] = value
+        return secrets
+    except Exception:
+        return {}
+
+def _get_secret(key, default=""):
+    """
+    Get secret from Streamlit secrets or secrets.toml file.
+    Works both in Streamlit context and when running directly.
+    """
+    # Try Streamlit secrets first (when running in Streamlit)
+    try:
+        return st.secrets.get(key, default)
+    except (AttributeError, RuntimeError, NameError):
+        # Not in Streamlit context, try loading from secrets.toml
+        secrets = _load_secrets_toml()
+        return secrets.get(key, default)
 
 def _notify_user(message, message_type="error"):
     """
@@ -745,15 +792,19 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
         return access_token
 
 if __name__ == "__main__":
-    load_dotenv()
-    NAVER_ID = os.getenv("NAVER_ID")
-    NAVER_APP_PW = os.getenv("NAVER_APP_PW")
-    login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    # Load from secrets.toml (preferred) or fallback to .env
+    NAVER_ID = _get_secret("NAVER_ID") or os.getenv("NAVER_ID")
+    NAVER_APP_PW = _get_secret("NAVER_APP_PW") or os.getenv("NAVER_APP_PW")
+    
+    if not NAVER_ID or not NAVER_APP_PW:
+        print("❌ NAVER_ID and NAVER_APP_PW must be set in .streamlit/secrets.toml or .env file")
+    else:
+        login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
     # get_kakao_token_via_webdriver(
-    #     rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
-    #     redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
-    #     kakao_id=os.getenv("KAKAO_ID"),
-    #     kakao_pw=os.getenv("KAKAO_PW")
+    #     rest_api_key=_get_secret("KAKAO_REST_API_KEY") or os.getenv("KAKAO_REST_API_KEY"),
+    #     redirect_uri=_get_secret("KAKAO_REDIRECT_URL") or os.getenv("KAKAO_REDIRECT_URL"),
+    #     kakao_id=_get_secret("KAKAO_ID") or os.getenv("KAKAO_ID"),
+    #     kakao_pw=_get_secret("KAKAO_PW") or os.getenv("KAKAO_PW")
     # )
