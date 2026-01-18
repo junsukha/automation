@@ -412,162 +412,245 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
             # Find and click login button
             # Based on the website, look for login button with text "로그인"
             try:
+                # Try multiple selectors for login button
                 login_btn = wait.until(EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button:contains('로그인'), input[value='로그인'], .btn_login, button[type='submit'], input[type='submit']"
+                    By.XPATH, 
+                    "//button[contains(text(), '로그인')] | //input[@value='로그인'] | //button[@type='submit'] | //input[@type='submit']"
                 )))
                 login_btn.click()
+                _notify_user("[ACA2000] Login button clicked", "info")
             except Exception:
                 # If no explicit button found, try submitting the form
                 try:
                     user_pw_input.submit()
+                    _notify_user("[ACA2000] Form submitted", "info")
                 except Exception:
                     # Try pressing Enter on password field
                     from selenium.webdriver.common.keys import Keys
                     user_pw_input.send_keys(Keys.RETURN)
+                    _notify_user("[ACA2000] Enter key pressed", "info")
             
-            # Wait for login to complete - check for navigation away from login page
-            # The page should redirect after successful login
-            wait.until(lambda d: d.current_url != aca2000_url or "출석부" in d.page_source or "/Attend" in d.current_url)
-            _notify_user("[ACA2000] ✅ Login successful", "success")
+            # Wait a moment for form submission to process
+            time.sleep(2)
             
-            # Step 2: Click 출석부 (Attendance) menu
-            _notify_user("[ACA2000] Step 2: Navigating to 출석부 (Attendance)...", "info")
-            try:
-                # Try multiple selectors for the 출석부 link
-                attend_link = wait.until(EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "a[href*='/Attend'], a[data-langnum='m3'], li[name='Attend'] a, .am3"
-                )))
-                attend_link.click()
-            except Exception:
-                # If direct click doesn't work, navigate directly
-                if "/Attend" not in driver.current_url:
-                    driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+            # Check for login errors or if we're still on login page
+            current_url = driver.current_url
+            _notify_user(f"[ACA2000] Current URL after login attempt: {current_url}", "info")
             
-            # Wait for attendance page to load
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".attendL, .class-list, #반목록, .반목록")))
-            _notify_user("[ACA2000] ✅ Navigated to 출석부", "success")
-            
-            # Step 3: Select the latest Saturday date
-            _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
-            today = datetime.now()
-            # Find the most recent Saturday
-            days_since_saturday = (today.weekday() - 5) % 7
-            if days_since_saturday == 0 and today.weekday() != 5:
-                # If today is not Saturday, go back to last Saturday
-                days_since_saturday = 7
-            latest_saturday = today - timedelta(days=days_since_saturday)
-            target_date = latest_saturday.strftime("%Y-%m-%d")
-            
-            # Click on date selector/calendar
-            try:
-                date_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='date'], .date-selector, .calendar-input")))
-                driver.execute_script("arguments[0].value = arguments[1];", date_input, target_date)
-                # Trigger change event
-                driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", date_input)
-            except Exception:
-                # Alternative: Click calendar icon and select date
+            # Check if login failed (still on login page with ReturnUrl parameter)
+            if "/Account/Login" in current_url or "ReturnUrl" in current_url:
+                _notify_user("[ACA2000] ⚠️ Still on login page - checking for errors...", "warning")
+                
+                # Check for error messages on the page
                 try:
-                    calendar_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".calendar-icon, .btn-calendar, img[src*='calendar']")))
-                    calendar_btn.click()
-                    # Wait for calendar to open and select the date
-                    date_element = wait.until(EC.element_to_be_clickable((By.XPATH, f"//td[contains(@class, 'day') and text()='{latest_saturday.day}']")))
-                    date_element.click()
+                    error_elements = driver.find_elements(By.CSS_SELECTOR, ".error, .alert, .warning, [class*='error'], [class*='alert']")
+                    if error_elements:
+                        error_text = " ".join([elem.text for elem in error_elements if elem.text])
+                        _notify_user(f"[ACA2000] ⚠️ Login error detected: {error_text}", "error")
                 except Exception:
-                    _notify_user("[ACA2000] ⚠️ Could not set date automatically, using current date", "warning")
-            
-            time.sleep(1)  # Brief wait for date selection to process
-            _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
-            
-            # Step 4: Get all classes and iterate through them
-            _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
-            try:
-                # Wait for class list to be visible
-                wait.until(EC.presence_of_element_located((
-                    By.CSS_SELECTOR, 
-                    ".반목록, #반목록, .class-list, .depth1, li.depth1"
-                )))
+                    pass
                 
-                # Find all class links/items
-                class_elements = driver.find_elements(By.CSS_SELECTOR, 
-                    "li.depth1 a, .class-item, .반목록 li a, a[onclick*='selectClass']"
-                )
-                
-                if not class_elements:
-                    # Try alternative selectors
-                    class_elements = driver.find_elements(By.CSS_SELECTOR, 
-                        "ul li a span.name, .attendL .class-name"
-                    )
-                
-                class_names = []
-                for elem in class_elements:
-                    class_name = elem.text.strip()
-                    if class_name and class_name not in class_names:
-                        class_names.append(class_name)
-                
-                _notify_user(f"[ACA2000] ✅ Found {len(class_names)} classes", "success")
-                
-            except Exception as e:
-                _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
-                class_names = []
-            
-            # Step 5: For each class, select it and extract student list
-            for class_name in class_names:
+                # Check if login form is still present
                 try:
-                    _notify_user(f"[ACA2000] Processing class: {class_name}...", "info")
-                    
-                    # Click on the class
-                    class_link = wait.until(EC.element_to_be_clickable((
-                        By.XPATH, 
-                        f"//a[contains(text(), '{class_name}') or .//span[text()='{class_name}']]"
-                    )))
-                    class_link.click()
-                    time.sleep(1)  # Wait for class selection to load students
-                    
-                    # Extract student names who participated (READ-ONLY - no modifications)
-                    try:
-                        # Note: Read-only mode is already active from driver initialization
-                        # MutationObserver automatically handles dynamically loaded buttons
-                        
-                        # Find student list - students are typically in spans with class "name"
-                        # IMPORTANT: We only READ text, never click attendance buttons
-                        student_elements = driver.find_elements(By.CSS_SELECTOR, 
-                            ".attendL .name, span.name, .student-name, .infoLine .name"
-                        )
-                        
-                        students = []
-                        for student_elem in student_elements:
-                            student_name = student_elem.text.strip()
-                            if student_name and student_name not in students:
-                                # READ-ONLY: Only extract text, never interact with buttons
-                                # Check parent to see if student has attendance status (visual check only)
-                                try:
-                                    parent = student_elem.find_element(By.XPATH, "./..")
-                                    # Look for attendance indicators (read-only check)
-                                    # We check for active/highlighted buttons but NEVER click them
-                                    parent.find_elements(By.CSS_SELECTOR, 
-                                        ".btn_attend.active, .attendance.active, button.active"
-                                    )
-                                    # If indicators found or not, we just read the name
-                                    students.append(student_name)
-                                except Exception:
-                                    # If we can't check, just read the name anyway
-                                    students.append(student_name)
-                        
-                        if students:
-                            all_students[class_name] = students
-                            _notify_user(f"[ACA2000] ✅ Found {len(students)} students in {class_name}", "success")
-                        else:
-                            _notify_user(f"[ACA2000] ⚠️ No students found for {class_name}", "warning")
-                    
-                    except Exception as e:
-                        _notify_user(f"[ACA2000] ⚠️ Error extracting students for {class_name}: {e}", "warning")
-                        continue
+                    if driver.find_elements(By.ID, "custNum"):
+                        _notify_user("[ACA2000] ⚠️ Login form still present - login may have failed", "error")
+                        driver.save_screenshot("aca2000_login_failed.png")
+                        # Try login again with explicit form submission
+                        try:
+                            login_form = driver.find_element(By.CSS_SELECTOR, "form")
+                            login_form.submit()
+                            _notify_user("[ACA2000] Retrying login with form submission", "info")
+                            time.sleep(3)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            
+            # Wait for login to complete and automatic redirect to /Attend
+            # The page should automatically redirect to https://t.aca2000.co.kr/Attend after successful login
+            _notify_user("[ACA2000] Waiting for login redirect to /Attend...", "info")
+            try:
+                # Wait for redirect to /Attend page (this happens automatically after login)
+                # Wait up to 10 seconds for redirect
+                wait_redirect = WebDriverWait(driver, 10)
+                wait_redirect.until(lambda d: "/Attend" in d.current_url and "/Account/Login" not in d.current_url)
+                _notify_user(f"[ACA2000] ✅ Login successful and redirected to: {driver.current_url}", "success")
+            except Exception:
+                # If redirect doesn't happen, check current URL
+                current_url = driver.current_url
+                _notify_user(f"[ACA2000] ⚠️ Redirect timeout. Current URL: {current_url}", "warning")
                 
-                except Exception as e:
-                    _notify_user(f"[ACA2000] ⚠️ Error processing class {class_name}: {e}", "warning")
-                    continue
+                # If still on login page, login likely failed
+                if "/Account/Login" in current_url or "ReturnUrl" in current_url:
+                    _notify_user("[ACA2000] ❌ Login failed - still on login page. Please check credentials.", "error")
+                    driver.save_screenshot("aca2000_login_failed.png")
+                    return {}
+                else:
+                    # On a different page, try navigating to /Attend
+                    _notify_user("[ACA2000] On different page, navigating to /Attend...", "info")
+                    try:
+                        driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+                        wait.until(lambda d: "/Attend" in d.current_url and "/Account/Login" not in d.current_url)
+                        _notify_user(f"[ACA2000] ✅ Navigated to: {driver.current_url}", "success")
+                    except Exception as nav_error:
+                        _notify_user(f"[ACA2000] ⚠️ Could not navigate to /Attend: {nav_error}", "warning")
+                        driver.save_screenshot("aca2000_navigation_failed.png")
+                        return {}
+            
+          
+            
+            # Verify we're on the Attend page (not login page)
+            final_url = driver.current_url
+            _notify_user(f"[ACA2000] Final URL after login: {final_url}", "info")
+            
+            if "/Attend" not in final_url or "/Account/Login" in final_url:
+                _notify_user("[ACA2000] ⚠️ Not on /Attend page, attempting to navigate...", "warning")
+                try:
+                    driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+                    wait.until(lambda d: "/Attend" in d.current_url and "/Account/Login" not in d.current_url)
+                    _notify_user(f"[ACA2000] ✅ Now on: {driver.current_url}", "success")
+                except Exception:
+                    _notify_user("[ACA2000] ❌ Could not reach /Attend page. Login may have failed.", "error")
+                    driver.save_screenshot("aca2000_final_check_failed.png")
+                    return {}
+            
+            # # Step 2: Click 출석부 (Attendance) menu
+            # _notify_user("[ACA2000] Step 2: Navigating to 출석부 (Attendance)...", "info")
+            # try:
+            #     # Try multiple selectors for the 출석부 link
+            #     attend_link = wait.until(EC.element_to_be_clickable((
+            #         By.CSS_SELECTOR, 
+            #         "a[href*='/Attend'], a[data-langnum='m3'], li[name='Attend'] a, .am3"
+            #     )))
+            #     attend_link.click()
+            # except Exception:
+            #     # If direct click doesn't work, navigate directly
+            #     if "/Attend" not in driver.current_url:
+            #         driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+            
+            # # Wait for attendance page to load
+            # wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".attendL, .class-list, #반목록, .반목록")))
+            # _notify_user("[ACA2000] ✅ Navigated to 출석부", "success")
+            
+            # # Step 3: Select the latest Saturday date
+            # _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
+            # today = datetime.now()
+            # # Find the most recent Saturday
+            # days_since_saturday = (today.weekday() - 5) % 7
+            # if days_since_saturday == 0 and today.weekday() != 5:
+            #     # If today is not Saturday, go back to last Saturday
+            #     days_since_saturday = 7
+            # latest_saturday = today - timedelta(days=days_since_saturday)
+            # target_date = latest_saturday.strftime("%Y-%m-%d")
+            
+            # # Click on date selector/calendar
+            # try:
+            #     date_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='date'], .date-selector, .calendar-input")))
+            #     driver.execute_script("arguments[0].value = arguments[1];", date_input, target_date)
+            #     # Trigger change event
+            #     driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", date_input)
+            # except Exception:
+            #     # Alternative: Click calendar icon and select date
+            #     try:
+            #         calendar_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".calendar-icon, .btn-calendar, img[src*='calendar']")))
+            #         calendar_btn.click()
+            #         # Wait for calendar to open and select the date
+            #         date_element = wait.until(EC.element_to_be_clickable((By.XPATH, f"//td[contains(@class, 'day') and text()='{latest_saturday.day}']")))
+            #         date_element.click()
+            #     except Exception:
+            #         _notify_user("[ACA2000] ⚠️ Could not set date automatically, using current date", "warning")
+            
+            # time.sleep(1)  # Brief wait for date selection to process
+            # _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+            
+            # # Step 4: Get all classes and iterate through them
+            # _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
+            # try:
+            #     # Wait for class list to be visible
+            #     wait.until(EC.presence_of_element_located((
+            #         By.CSS_SELECTOR, 
+            #         ".반목록, #반목록, .class-list, .depth1, li.depth1"
+            #     )))
+                
+            #     # Find all class links/items
+            #     class_elements = driver.find_elements(By.CSS_SELECTOR, 
+            #         "li.depth1 a, .class-item, .반목록 li a, a[onclick*='selectClass']"
+            #     )
+                
+            #     if not class_elements:
+            #         # Try alternative selectors
+            #         class_elements = driver.find_elements(By.CSS_SELECTOR, 
+            #             "ul li a span.name, .attendL .class-name"
+            #         )
+                
+            #     class_names = []
+            #     for elem in class_elements:
+            #         class_name = elem.text.strip()
+            #         if class_name and class_name not in class_names:
+            #             class_names.append(class_name)
+                
+            #     _notify_user(f"[ACA2000] ✅ Found {len(class_names)} classes", "success")
+                
+            # except Exception as e:
+            #     _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
+            #     class_names = []
+            
+            # # Step 5: For each class, select it and extract student list
+            # for class_name in class_names:
+            #     try:
+            #         _notify_user(f"[ACA2000] Processing class: {class_name}...", "info")
+                    
+            #         # Click on the class
+            #         class_link = wait.until(EC.element_to_be_clickable((
+            #             By.XPATH, 
+            #             f"//a[contains(text(), '{class_name}') or .//span[text()='{class_name}']]"
+            #         )))
+            #         class_link.click()
+            #         time.sleep(1)  # Wait for class selection to load students
+                    
+            #         # Extract student names who participated (READ-ONLY - no modifications)
+            #         try:
+            #             # Note: Read-only mode is already active from driver initialization
+            #             # MutationObserver automatically handles dynamically loaded buttons
+                        
+            #             # Find student list - students are typically in spans with class "name"
+            #             # IMPORTANT: We only READ text, never click attendance buttons
+            #             student_elements = driver.find_elements(By.CSS_SELECTOR, 
+            #                 ".attendL .name, span.name, .student-name, .infoLine .name"
+            #             )
+                        
+            #             students = []
+            #             for student_elem in student_elements:
+            #                 student_name = student_elem.text.strip()
+            #                 if student_name and student_name not in students:
+            #                     # READ-ONLY: Only extract text, never interact with buttons
+            #                     # Check parent to see if student has attendance status (visual check only)
+            #                     try:
+            #                         parent = student_elem.find_element(By.XPATH, "./..")
+            #                         # Look for attendance indicators (read-only check)
+            #                         # We check for active/highlighted buttons but NEVER click them
+            #                         parent.find_elements(By.CSS_SELECTOR, 
+            #                             ".btn_attend.active, .attendance.active, button.active"
+            #                         )
+            #                         # If indicators found or not, we just read the name
+            #                         students.append(student_name)
+            #                     except Exception:
+            #                         # If we can't check, just read the name anyway
+            #                         students.append(student_name)
+                        
+            #             if students:
+            #                 all_students[class_name] = students
+            #                 _notify_user(f"[ACA2000] ✅ Found {len(students)} students in {class_name}", "success")
+            #             else:
+            #                 _notify_user(f"[ACA2000] ⚠️ No students found for {class_name}", "warning")
+                    
+            #         except Exception as e:
+            #             _notify_user(f"[ACA2000] ⚠️ Error extracting students for {class_name}: {e}", "warning")
+            #             continue
+                
+            #     except Exception as e:
+            #         _notify_user(f"[ACA2000] ⚠️ Error processing class {class_name}: {e}", "warning")
+            #         continue
             
             _notify_user(f"[ACA2000] ✅ Completed! Found students from {len(all_students)} classes", "success")
             return all_students
@@ -793,13 +876,13 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
 
 if __name__ == "__main__":
     # Load from secrets.toml (preferred) or fallback to .env
-    NAVER_ID = _get_secret("NAVER_ID") or os.getenv("NAVER_ID")
-    NAVER_APP_PW = _get_secret("NAVER_APP_PW") or os.getenv("NAVER_APP_PW")
+    # NAVER_ID = _get_secret("NAVER_ID") or os.getenv("NAVER_ID")
+    # NAVER_APP_PW = _get_secret("NAVER_APP_PW") or os.getenv("NAVER_APP_PW")
     
-    if not NAVER_ID or not NAVER_APP_PW:
-        print("❌ NAVER_ID and NAVER_APP_PW must be set in .streamlit/secrets.toml or .env file")
-    else:
-        login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    # if not NAVER_ID or not NAVER_APP_PW:
+    #     print("❌ NAVER_ID and NAVER_APP_PW must be set in .streamlit/secrets.toml or .env file")
+    # else:
+    #     login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
     # get_kakao_token_via_webdriver(
@@ -808,3 +891,11 @@ if __name__ == "__main__":
     #     kakao_id=_get_secret("KAKAO_ID") or os.getenv("KAKAO_ID"),
     #     kakao_pw=_get_secret("KAKAO_PW") or os.getenv("KAKAO_PW")
     # )
+    
+    
+    # test aca2000 attendance system
+    # use stealit.secrets to get the credentials
+    cust_num = st.secrets.get("ACA2000_CUST_NUM")
+    user_id = st.secrets.get("ACA2000_USER_ID")
+    user_pw = st.secrets.get("ACA2000_USER_PW")
+    get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
