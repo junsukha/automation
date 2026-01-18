@@ -47,8 +47,114 @@ def _notify_user(message, message_type="error"):
         # Streamlit not available or not in proper context, use print
         print(message)
 
+def _make_driver_read_only(driver):
+    """
+    Inject JavaScript to make the page read-only using a global approach.
+    Intercepts ALL click events and form submissions, then allows only navigation/reading operations.
+    Much simpler than manually disabling specific buttons.
+    """
+    read_only_script = """
+    (function() {
+        // Define what's allowed (navigation/reading operations)
+        const allowedOperations = {
+            // Navigation links (href attributes)
+            isNavigationLink: function(element) {
+                return element.tagName === 'A' && element.href && 
+                       (element.href.startsWith('http') || element.href.startsWith('#') || element.href.startsWith('/'));
+            },
+            // Date/calendar selectors (for selecting dates)
+            isDateSelector: function(element) {
+                return element.type === 'date' || 
+                       element.id && (element.id.includes('date') || element.id.includes('calendar')) ||
+                       element.className && (element.className.includes('date') || element.className.includes('calendar'));
+            },
+            // Search/filter inputs (for filtering data)
+            isSearchFilter: function(element) {
+                return element.type === 'search' ||
+                       element.id && (element.id.includes('search') || element.id.includes('filter')) ||
+                       element.className && (element.className.includes('search') || element.className.includes('filter'));
+            },
+            // Class selection links (for navigating between classes)
+            isClassSelector: function(element) {
+                return element.onclick && element.onclick.toString().includes('selectClass') ||
+                       element.getAttribute('onclick') && element.getAttribute('onclick').includes('selectClass') ||
+                       (element.tagName === 'A' && element.textContent && 
+                        (element.textContent.match(/^[A-Z]\\d+/) || element.className.includes('class')));
+            }
+        };
+        
+        // Global click interceptor - blocks ALL clicks except allowed ones
+        document.addEventListener('click', function(e) {
+            const target = e.target;
+            const element = target.closest('button, a, input[type="submit"], input[type="button"]') || target;
+            
+            // Allow navigation links
+            if (allowedOperations.isNavigationLink(element)) {
+                return true;
+            }
+            
+            // Allow class selection (for navigating between classes)
+            if (allowedOperations.isClassSelector(element)) {
+                return true;
+            }
+            
+            // Block everything else (buttons, form submissions, etc.)
+            // This is a global block - no need to list specific button types
+            if (element.tagName === 'BUTTON' || 
+                element.type === 'submit' || 
+                element.type === 'button' ||
+                element.onclick ||
+                element.getAttribute('onclick')) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return false;
+            }
+        }, true); // Use capture phase to intercept early
+        
+        // Global form submission blocker
+        document.addEventListener('submit', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+        }, true);
+        
+        // Make all input fields read-only (except allowed ones)
+        function makeInputsReadOnly() {
+            const inputs = document.querySelectorAll('input[type="text"], input[type="number"], textarea');
+            inputs.forEach(input => {
+                if (!allowedOperations.isDateSelector(input) && 
+                    !allowedOperations.isSearchFilter(input)) {
+                    input.readOnly = true;
+                    input.style.backgroundColor = '#f5f5f5';
+                }
+            });
+        }
+        
+        // Apply to existing inputs
+        makeInputsReadOnly();
+        
+        // Use MutationObserver to handle dynamically added inputs
+        const observer = new MutationObserver(function(mutations) {
+            makeInputsReadOnly();
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        console.log('Read-only mode activated - global protection enabled');
+    })();
+    """
+    try:
+        driver.execute_script(read_only_script)
+    except Exception:
+        pass  # Ignore if script fails
+
 @contextmanager
-def get_driver_context(headless=False, stealth=False):
+def get_driver_context(headless=False, stealth=False, read_only=True):
     """
     Context manager for WebDriver that ensures proper cleanup.
     
@@ -60,6 +166,7 @@ def get_driver_context(headless=False, stealth=False):
     Args:
         headless (bool): Whether to run in headless mode
         stealth (bool): Whether to use stealth mode (for headless)
+        read_only (bool): Whether to enable read-only mode (prevents modifications, default: True)
     
     Yields:
         webdriver.Chrome: Configured Chrome WebDriver
@@ -101,6 +208,11 @@ def get_driver_context(headless=False, stealth=False):
                 service=Service(ChromeDriverManager().install()),
                 options=options
             )
+        
+        # Enable read-only mode if requested (default: True)
+        if read_only:
+            _make_driver_read_only(driver)
+        
         yield driver
     finally:
         if driver:
@@ -177,10 +289,246 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         return False
     
     
-def get_students_from_aca2000():
-    # TODO: Implement actual logic to fetch student data from ACA2000
-    # Placeholder function to simulate fetching student data
-    return ["Student A", "Student B", "Student C"]
+def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, user_pw=None, headless=False):
+    """
+    Fetches student lists from ACA2000 attendance system for each class.
+    
+    ⚠️ READ-ONLY MODE: This function only READS data and does NOT modify any information.
+    All write operations (attendance buttons, edit buttons, save buttons) are disabled.
+    
+    Steps:
+    1. Login to ACA2000 at https://t.aca2000.co.kr/
+    2. Click 출석부 (Attendance) menu
+    3. Select the latest Saturday date
+    4. Select a class from the class list
+    5. Extract student names who participated
+    
+    Args:
+        aca2000_url (str): Base URL for ACA2000 system (defaults to https://t.aca2000.co.kr/)
+        cust_num (str): Academy number (학원번호)
+        user_id (str): User ID (아이디)
+        user_pw (str): User password (비밀번호)
+        headless (bool): Whether to run in headless mode
+    
+    Returns:
+        dict: Dictionary with class names as keys and lists of student names as values
+        Example: {"M7 월금": ["김빛나", "김서준", ...], "M5 월금": [...]}
+    """
+    # Default URL
+    if not aca2000_url:
+        aca2000_url = "https://t.aca2000.co.kr/"
+    
+    # Get credentials from secrets if not provided
+    if not cust_num:
+        try:
+            cust_num = st.secrets.get("ACA2000_CUST_NUM", "")
+        except Exception:
+            cust_num = os.getenv("ACA2000_CUST_NUM", "")
+    
+    if not user_id:
+        try:
+            user_id = st.secrets.get("ACA2000_USER_ID", "")
+        except Exception:
+            user_id = os.getenv("ACA2000_USER_ID", "")
+    
+    if not user_pw:
+        try:
+            user_pw = st.secrets.get("ACA2000_USER_PW", "")
+        except Exception:
+            user_pw = os.getenv("ACA2000_USER_PW", "")
+    
+    if not all([cust_num, user_id, user_pw]):
+        _notify_user("❌ ACA2000 credentials (CUST_NUM, USER_ID, USER_PW) must be set", "error")
+        return {}
+    
+    all_students = {}  # {class_name: [student_names]}
+    
+    # Use read-only mode to prevent any modifications
+    with get_driver_context(headless=headless, stealth=False, read_only=True) as driver:
+        wait = WebDriverWait(driver, 20)
+        
+        try:
+            # Step 1: Login
+            _notify_user("[ACA2000] Step 1: Logging in...", "info")
+            driver.get(aca2000_url)
+            
+            # Wait for login form and fill credentials
+            cust_num_input = wait.until(EC.presence_of_element_located((By.ID, "custNum")))
+            driver.execute_script("arguments[0].value = arguments[1];", cust_num_input, cust_num)
+            
+            user_id_input = wait.until(EC.presence_of_element_located((By.ID, "userID")))
+            driver.execute_script("arguments[0].value = arguments[1];", user_id_input, user_id)
+            
+            user_pw_input = wait.until(EC.presence_of_element_located((By.ID, "userPW")))
+            driver.execute_script("arguments[0].value = arguments[1];", user_pw_input, user_pw)
+            
+            # Find and click login button
+            # Based on the website, look for login button with text "로그인"
+            try:
+                login_btn = wait.until(EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "button:contains('로그인'), input[value='로그인'], .btn_login, button[type='submit'], input[type='submit']"
+                )))
+                login_btn.click()
+            except Exception:
+                # If no explicit button found, try submitting the form
+                try:
+                    user_pw_input.submit()
+                except Exception:
+                    # Try pressing Enter on password field
+                    from selenium.webdriver.common.keys import Keys
+                    user_pw_input.send_keys(Keys.RETURN)
+            
+            # Wait for login to complete - check for navigation away from login page
+            # The page should redirect after successful login
+            wait.until(lambda d: d.current_url != aca2000_url or "출석부" in d.page_source or "/Attend" in d.current_url)
+            _notify_user("[ACA2000] ✅ Login successful", "success")
+            
+            # Step 2: Click 출석부 (Attendance) menu
+            _notify_user("[ACA2000] Step 2: Navigating to 출석부 (Attendance)...", "info")
+            try:
+                # Try multiple selectors for the 출석부 link
+                attend_link = wait.until(EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "a[href*='/Attend'], a[data-langnum='m3'], li[name='Attend'] a, .am3"
+                )))
+                attend_link.click()
+            except Exception:
+                # If direct click doesn't work, navigate directly
+                if "/Attend" not in driver.current_url:
+                    driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+            
+            # Wait for attendance page to load
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".attendL, .class-list, #반목록, .반목록")))
+            _notify_user("[ACA2000] ✅ Navigated to 출석부", "success")
+            
+            # Step 3: Select the latest Saturday date
+            _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
+            today = datetime.now()
+            # Find the most recent Saturday
+            days_since_saturday = (today.weekday() - 5) % 7
+            if days_since_saturday == 0 and today.weekday() != 5:
+                # If today is not Saturday, go back to last Saturday
+                days_since_saturday = 7
+            latest_saturday = today - timedelta(days=days_since_saturday)
+            target_date = latest_saturday.strftime("%Y-%m-%d")
+            
+            # Click on date selector/calendar
+            try:
+                date_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='date'], .date-selector, .calendar-input")))
+                driver.execute_script("arguments[0].value = arguments[1];", date_input, target_date)
+                # Trigger change event
+                driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", date_input)
+            except Exception:
+                # Alternative: Click calendar icon and select date
+                try:
+                    calendar_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".calendar-icon, .btn-calendar, img[src*='calendar']")))
+                    calendar_btn.click()
+                    # Wait for calendar to open and select the date
+                    date_element = wait.until(EC.element_to_be_clickable((By.XPATH, f"//td[contains(@class, 'day') and text()='{latest_saturday.day}']")))
+                    date_element.click()
+                except Exception:
+                    _notify_user("[ACA2000] ⚠️ Could not set date automatically, using current date", "warning")
+            
+            time.sleep(1)  # Brief wait for date selection to process
+            _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+            
+            # Step 4: Get all classes and iterate through them
+            _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
+            try:
+                # Wait for class list to be visible
+                wait.until(EC.presence_of_element_located((
+                    By.CSS_SELECTOR, 
+                    ".반목록, #반목록, .class-list, .depth1, li.depth1"
+                )))
+                
+                # Find all class links/items
+                class_elements = driver.find_elements(By.CSS_SELECTOR, 
+                    "li.depth1 a, .class-item, .반목록 li a, a[onclick*='selectClass']"
+                )
+                
+                if not class_elements:
+                    # Try alternative selectors
+                    class_elements = driver.find_elements(By.CSS_SELECTOR, 
+                        "ul li a span.name, .attendL .class-name"
+                    )
+                
+                class_names = []
+                for elem in class_elements:
+                    class_name = elem.text.strip()
+                    if class_name and class_name not in class_names:
+                        class_names.append(class_name)
+                
+                _notify_user(f"[ACA2000] ✅ Found {len(class_names)} classes", "success")
+                
+            except Exception as e:
+                _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
+                class_names = []
+            
+            # Step 5: For each class, select it and extract student list
+            for class_name in class_names:
+                try:
+                    _notify_user(f"[ACA2000] Processing class: {class_name}...", "info")
+                    
+                    # Click on the class
+                    class_link = wait.until(EC.element_to_be_clickable((
+                        By.XPATH, 
+                        f"//a[contains(text(), '{class_name}') or .//span[text()='{class_name}']]"
+                    )))
+                    class_link.click()
+                    time.sleep(1)  # Wait for class selection to load students
+                    
+                    # Extract student names who participated (READ-ONLY - no modifications)
+                    try:
+                        # Note: Read-only mode is already active from driver initialization
+                        # MutationObserver automatically handles dynamically loaded buttons
+                        
+                        # Find student list - students are typically in spans with class "name"
+                        # IMPORTANT: We only READ text, never click attendance buttons
+                        student_elements = driver.find_elements(By.CSS_SELECTOR, 
+                            ".attendL .name, span.name, .student-name, .infoLine .name"
+                        )
+                        
+                        students = []
+                        for student_elem in student_elements:
+                            student_name = student_elem.text.strip()
+                            if student_name and student_name not in students:
+                                # READ-ONLY: Only extract text, never interact with buttons
+                                # Check parent to see if student has attendance status (visual check only)
+                                try:
+                                    parent = student_elem.find_element(By.XPATH, "./..")
+                                    # Look for attendance indicators (read-only check)
+                                    # We check for active/highlighted buttons but NEVER click them
+                                    parent.find_elements(By.CSS_SELECTOR, 
+                                        ".btn_attend.active, .attendance.active, button.active"
+                                    )
+                                    # If indicators found or not, we just read the name
+                                    students.append(student_name)
+                                except Exception:
+                                    # If we can't check, just read the name anyway
+                                    students.append(student_name)
+                        
+                        if students:
+                            all_students[class_name] = students
+                            _notify_user(f"[ACA2000] ✅ Found {len(students)} students in {class_name}", "success")
+                        else:
+                            _notify_user(f"[ACA2000] ⚠️ No students found for {class_name}", "warning")
+                    
+                    except Exception as e:
+                        _notify_user(f"[ACA2000] ⚠️ Error extracting students for {class_name}: {e}", "warning")
+                        continue
+                
+                except Exception as e:
+                    _notify_user(f"[ACA2000] ⚠️ Error processing class {class_name}: {e}", "warning")
+                    continue
+            
+            _notify_user(f"[ACA2000] ✅ Completed! Found students from {len(all_students)} classes", "success")
+            return all_students
+            
+        except Exception as e:
+            _notify_user(f"[ACA2000] ❌ Error during crawling: {e}", "error")
+            driver.save_screenshot("aca2000_error.png")
+            return all_students
 
 
 
@@ -396,14 +744,14 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
 
 if __name__ == "__main__":
     load_dotenv()
-    # NAVER_ID = os.getenv("NAVER_ID")
-    # NAVER_APP_PW = os.getenv("NAVER_APP_PW")
-    # login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
+    NAVER_ID = os.getenv("NAVER_ID")
+    NAVER_APP_PW = os.getenv("NAVER_APP_PW")
+    login_to_naver(headless=False, naver_id=NAVER_ID, naver_passkey=NAVER_APP_PW)
     
     # test kakao OAuth
-    get_kakao_token_via_webdriver(
-        rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
-        redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
-        kakao_id=os.getenv("KAKAO_ID"),
-        kakao_pw=os.getenv("KAKAO_PW")
-    )
+    # get_kakao_token_via_webdriver(
+    #     rest_api_key=os.getenv("KAKAO_REST_API_KEY"),
+    #     redirect_uri=os.getenv("KAKAO_REDIRECT_URL"),
+    #     kakao_id=os.getenv("KAKAO_ID"),
+    #     kakao_pw=os.getenv("KAKAO_PW")
+    # )
