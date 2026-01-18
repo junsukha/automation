@@ -603,7 +603,8 @@ def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=N
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
     """    
-    with get_driver_context(headless=headless, stealth=stealth) as driver:
+    # Disable read-only mode for login (we need to submit the form)
+    with get_driver_context(headless=headless, stealth=stealth, read_only=False) as driver:
         # Set a max wait time of 10 seconds
         wait = WebDriverWait(driver, 10)
         try:
@@ -696,7 +697,8 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
     oauth_url = msg_api.get_url_for_generating_code()
     _notify_user(f'[Kakao OAuth] Navigating to URL: {oauth_url}', "info")
     
-    with get_driver_context(headless=False, stealth=False) as driver:
+    # Disable read-only mode for OAuth login (we need to submit forms)
+    with get_driver_context(headless=False, stealth=False, read_only=False) as driver:
         driver.get(oauth_url)
         wait = WebDriverWait(driver, 300)
             # Try to find login form. If not present, skip login.
