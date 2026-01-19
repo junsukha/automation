@@ -533,6 +533,16 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
             # for debugging
             time.sleep(5) # wait for 5 seconds to see the page
             
+            # Check what date is currently displayed
+            try:
+                current_date_display = driver.find_element(By.CSS_SELECTOR, ".date-display, .current-date, div[class*='date']").text
+                _notify_user(f"[ACA2000] Current date displayed: {current_date_display}", "info")
+            except Exception:
+                _notify_user("[ACA2000] Could not read current date display", "info")
+            
+            driver.save_screenshot("aca2000_before_date_selection.png")
+            _notify_user("[ACA2000] 📸 Screenshot before date selection: aca2000_before_date_selection.png", "info")
+            
             # Step 3: Select the latest Saturday date
             _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
             today = datetime.now()
@@ -550,64 +560,143 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
             _notify_user(f"[ACA2000] Target date: {target_date} (latest Saturday)", "info")
             
             try:
-                # Step 3a: Click calendar icon to open the calendar
-                calendar_btn = wait.until(EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "img[src*='btn_calendar'], img[src*='calendar'], .calendar-icon, .btn-calendar, button[class*='calendar']"
-                )))
-                calendar_btn.click()
-                # for debugging
-                time.sleep(5)  # Wait for calendar to open
-                _notify_user("[ACA2000] 📅 Calendar opened", "info")
+                # Step 3a: Try clicking on the date text or calendar icon to open calendar
+                _notify_user("[ACA2000] Attempting to open calendar...", "info")
                 
-                # Step 3b: Navigate to the correct month/year
-                # Get current displayed month/year from calendar header
-                max_navigation_attempts = 12  # Prevent infinite loops
-                for attempt in range(max_navigation_attempts):
-                    try:
-                        # Find the calendar header showing current month/year (e.g., "2026년 1월")
-                        calendar_header = driver.find_element(By.CSS_SELECTOR, ".datepicker-switch, .calendar-header, .datepicker-header, th[class*='switch']")
-                        header_text = calendar_header.text.strip()
-                        _notify_user(f"[ACA2000] Calendar showing: {header_text}", "info")
-                        
-                        # Extract year and month from header (format: "2026년 1월")
-                        import re
-                        match = re.search(r'(\d{4})년\s*(\d{1,2})월', header_text)
-                        if match:
-                            current_year = int(match.group(1))
-                            current_month = int(match.group(2))
+                # Try clicking the date input field (might open calendar)
+                try:
+                    date_input = driver.find_element(By.ID, "iDate")
+                    date_input.click()
+                    time.sleep(1)
+                except Exception:
+                    pass
+                
+                # Or try clicking the calendar icon
+                try:
+                    calendar_btn = driver.find_element(By.CSS_SELECTOR, "img[src*='btn_calendar'], img[src*='calendar']")
+                    driver.execute_script("arguments[0].click();", calendar_btn)
+                    time.sleep(1)
+                except Exception:
+                    pass
+                
+                # Check if calendar popup appeared
+                calendar_opened = False
+                try:
+                    calendar_popup = wait.until(EC.visibility_of_element_located((
+                        By.CSS_SELECTOR, 
+                        ".datepicker-dropdown, div.datepicker[style*='display: block']"
+                    )))
+                    calendar_opened = True
+                    _notify_user("[ACA2000] ✅ Calendar popup opened", "success")
+                except Exception:
+                    _notify_user("[ACA2000] Calendar popup not found, will use arrow navigation", "info")
+                
+                driver.save_screenshot("aca2000_after_calendar_attempt.png")
+                _notify_user("[ACA2000] 📸 Screenshot: aca2000_after_calendar_attempt.png", "info")
+                
+                # Step 3b: Navigate to the target date
+                if calendar_opened:
+                    # If calendar popup is open, navigate within the popup
+                    _notify_user("[ACA2000] Navigating calendar popup...", "info")
+                    max_navigation_attempts = 12
+                    calendar_navigated = False
+                    
+                    for attempt in range(max_navigation_attempts):
+                        try:
+                            # Find the calendar header showing current month/year (e.g., "2026년 1월")
+                            _notify_user(f"[ACA2000] Looking for calendar header (attempt {attempt + 1})...", "info")
+                            calendar_header = driver.find_element(By.CSS_SELECTOR, "th.datepicker-switch")
+                            header_text = calendar_header.text.strip()
+                            _notify_user(f"[ACA2000] Calendar showing: {header_text}", "info")
                             
-                            # Check if we're on the correct month
-                            if current_year == target_year and current_month == target_month:
-                                _notify_user(f"[ACA2000] ✅ On correct month: {target_year}-{target_month:02d}", "success")
+                            # Extract year and month from header (format: "2026년 1월")
+                            import re
+                            match = re.search(r'(\d{4})년\s*(\d{1,2})월', header_text)
+                            if match:
+                                current_year = int(match.group(1))
+                                current_month = int(match.group(2))
+                                
+                                # Check if we're on the correct month
+                                if current_year == target_year and current_month == target_month:
+                                    _notify_user(f"[ACA2000] ✅ On correct month: {target_year}-{target_month:02d}", "success")
+                                    calendar_navigated = True
+                                    break
+                                elif (current_year < target_year) or (current_year == target_year and current_month < target_month):
+                                    # Need to go forward
+                                    next_btn = driver.find_element(By.CSS_SELECTOR, "th.next")
+                                    next_btn.click()
+                                    time.sleep(0.5)
+                                else:
+                                    # Need to go backward
+                                    prev_btn = driver.find_element(By.CSS_SELECTOR, "th.prev")
+                                    prev_btn.click()
+                                    time.sleep(0.5)
+                            else:
+                                # Can't parse header, try clicking the date anyway
+                                _notify_user("[ACA2000] ⚠️ Could not parse calendar header, proceeding with date selection", "warning")
+                                calendar_navigated = True
                                 break
-                            elif (current_year < target_year) or (current_year == target_year and current_month < target_month):
-                                # Need to go forward
-                                next_btn = driver.find_element(By.CSS_SELECTOR, ".next, .calendar-next, button[class*='next'], .arrow-right")
+                        except Exception as e:
+                            # Calendar might have closed or element not found - this is okay if we already navigated
+                            if not calendar_navigated:
+                                _notify_user(f"[ACA2000] ⚠️ Calendar navigation issue: {type(e).__name__}", "warning")
+                                driver.save_screenshot("aca2000_calendar_nav_error.png")
+                                _notify_user("[ACA2000] 📸 Error screenshot saved: aca2000_calendar_nav_error.png", "info")
+                            break
+                
+                    # Step 3c: Click on the target Saturday date in calendar popup
+                    # Date structure: <td class="day"><div>16</div></td>
+                    try:
+                        date_cell = wait.until(EC.element_to_be_clickable((
+                            By.XPATH, 
+                            f"//td[contains(@class, 'day') and not(contains(@class, 'disabled'))]//div[text()='{target_day}']"
+                        )))
+                        _notify_user(f"[ACA2000] Clicking on date: {target_day}", "info")
+                        date_cell.click()
+                        time.sleep(2)
+                        _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+                    except Exception as e:
+                        _notify_user(f"[ACA2000] ⚠️ Could not click date in calendar: {e}", "warning")
+                
+                else:
+                    # No calendar popup - use arrow buttons to navigate to target date
+                    _notify_user("[ACA2000] Using arrow button navigation...", "info")
+                    
+                    max_clicks = 30  # Safety limit
+                    for click_count in range(max_clicks):
+                        try:
+                            # Read the date from the input field with id="iDate"
+                            current_date_elem = driver.find_element(By.ID, "iDate")
+                            current_date_str = current_date_elem.get_attribute("value").strip()
+                            _notify_user(f"[ACA2000] Current: {current_date_str}, Target: {target_date}", "info")
+                            
+                            if current_date_str == target_date:
+                                _notify_user(f"[ACA2000] ✅ Reached target date: {target_date}", "success")
+                                break
+                            
+                            # Parse dates for comparison
+                            current = datetime.strptime(current_date_str, "%Y-%m-%d")
+                            target = datetime.strptime(target_date, "%Y-%m-%d")
+                            
+                            if current < target:
+                                # Need to go forward - click right arrow
+                                next_btn = driver.find_element(By.XPATH, "//a[contains(@onclick, 'nextDay')] | //a[contains(., '▶')]")
                                 next_btn.click()
+                                _notify_user("[ACA2000] Clicked next day →", "info")
                                 time.sleep(0.5)
                             else:
-                                # Need to go backward
-                                prev_btn = driver.find_element(By.CSS_SELECTOR, ".prev, .calendar-prev, button[class*='prev'], .arrow-left")
+                                # Need to go backward - click left arrow
+                                prev_btn = driver.find_element(By.XPATH, "//a[contains(@onclick, 'prevDay')] | //a[contains(., '◀')]")
                                 prev_btn.click()
+                                _notify_user("[ACA2000] Clicked prev day ←", "info")
                                 time.sleep(0.5)
-                        else:
-                            # Can't parse header, try clicking the date anyway
+                                
+                        except Exception as e:
+                            _notify_user(f"[ACA2000] ⚠️ Arrow navigation failed: {str(e)[:100]}", "warning")
                             break
-                    except Exception as e:
-                        _notify_user(f"[ACA2000] ⚠️ Could not navigate calendar: {e}", "warning")
-                        break
-                
-                # Step 3c: Click on the target Saturday date
-                date_cell = wait.until(EC.element_to_be_clickable((
-                    By.XPATH, 
-                    f"//td[not(contains(@class, 'disabled')) and (text()='{target_day}' or contains(text(), '{target_day}'))]"
-                )))
-                _notify_user(f"[ACA2000] Clicking on date: {target_day}", "info")
-                date_cell.click()
-                
-                time.sleep(2)  # Wait for page to reload with selected date
-                _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+                    
+                    driver.save_screenshot("aca2000_after_date_navigation.png")
+                    _notify_user("[ACA2000] 📸 Screenshot: aca2000_after_date_navigation.png", "info")
                 
             except Exception as e:
                 _notify_user(f"[ACA2000] ⚠️ Could not select date: {e}", "warning")
