@@ -430,8 +430,6 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
                     user_pw_input.send_keys(Keys.RETURN)
                     _notify_user("[ACA2000] Enter key pressed", "info")
             
-            # Wait a moment for form submission to process
-            time.sleep(2)
             
             # Check for login errors or if we're still on login page
             current_url = driver.current_url
@@ -514,54 +512,107 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
                     driver.save_screenshot("aca2000_final_check_failed.png")
                     return {}
             
-            # # Step 2: Click 출석부 (Attendance) menu
-            # _notify_user("[ACA2000] Step 2: Navigating to 출석부 (Attendance)...", "info")
-            # try:
-            #     # Try multiple selectors for the 출석부 link
-            #     attend_link = wait.until(EC.element_to_be_clickable((
-            #         By.CSS_SELECTOR, 
-            #         "a[href*='/Attend'], a[data-langnum='m3'], li[name='Attend'] a, .am3"
-            #     )))
-            #     attend_link.click()
-            # except Exception:
-            #     # If direct click doesn't work, navigate directly
-            #     if "/Attend" not in driver.current_url:
-            #         driver.get(f"{aca2000_url.rstrip('/')}/Attend")
+            # Step 2: Click 출석부 (Attendance) menu
+            _notify_user("[ACA2000] Step 2: Navigating to 출석부 (Attendance)...", "info")
+            try:
+                # Try multiple selectors for the 출석부 link
+                attend_link = wait.until(EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "a[href*='/Attend'], a[data-langnum='m3'], li[name='Attend'] a, .am3"
+                )))
+                attend_link.click()
+            except Exception:
+                # If direct click doesn't work, navigate directly
+                if "/Attend" not in driver.current_url:
+                    driver.get(f"{aca2000_url.rstrip('/')}/Attend")
             
-            # # Wait for attendance page to load
-            # wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".attendL, .class-list, #반목록, .반목록")))
-            # _notify_user("[ACA2000] ✅ Navigated to 출석부", "success")
+            # Wait for attendance page to load
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".attendL, .class-list, #반목록, .반목록")))
+            _notify_user("[ACA2000] ✅ Navigated to 출석부", "success")
             
-            # # Step 3: Select the latest Saturday date
-            # _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
-            # today = datetime.now()
-            # # Find the most recent Saturday
-            # days_since_saturday = (today.weekday() - 5) % 7
-            # if days_since_saturday == 0 and today.weekday() != 5:
-            #     # If today is not Saturday, go back to last Saturday
-            #     days_since_saturday = 7
-            # latest_saturday = today - timedelta(days=days_since_saturday)
-            # target_date = latest_saturday.strftime("%Y-%m-%d")
+            # for debugging
+            time.sleep(5) # wait for 5 seconds to see the page
             
-            # # Click on date selector/calendar
-            # try:
-            #     date_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='date'], .date-selector, .calendar-input")))
-            #     driver.execute_script("arguments[0].value = arguments[1];", date_input, target_date)
-            #     # Trigger change event
-            #     driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", date_input)
-            # except Exception:
-            #     # Alternative: Click calendar icon and select date
-            #     try:
-            #         calendar_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".calendar-icon, .btn-calendar, img[src*='calendar']")))
-            #         calendar_btn.click()
-            #         # Wait for calendar to open and select the date
-            #         date_element = wait.until(EC.element_to_be_clickable((By.XPATH, f"//td[contains(@class, 'day') and text()='{latest_saturday.day}']")))
-            #         date_element.click()
-            #     except Exception:
-            #         _notify_user("[ACA2000] ⚠️ Could not set date automatically, using current date", "warning")
+            # Step 3: Select the latest Saturday date
+            _notify_user("[ACA2000] Step 3: Selecting latest Saturday date...", "info")
+            today = datetime.now()
+            # Find the most recent Saturday
+            days_since_saturday = (today.weekday() - 5) % 7
+            if days_since_saturday == 0 and today.weekday() != 5:
+                # If today is not Saturday, go back to last Saturday
+                days_since_saturday = 7
+            latest_saturday = today - timedelta(days=days_since_saturday)
+            target_date = latest_saturday.strftime("%Y-%m-%d")
+            target_year = latest_saturday.year
+            target_month = latest_saturday.month
+            target_day = latest_saturday.day
             
-            # time.sleep(1)  # Brief wait for date selection to process
-            # _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+            _notify_user(f"[ACA2000] Target date: {target_date} (latest Saturday)", "info")
+            
+            try:
+                # Step 3a: Click calendar icon to open the calendar
+                calendar_btn = wait.until(EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "img[src*='btn_calendar'], img[src*='calendar'], .calendar-icon, .btn-calendar, button[class*='calendar']"
+                )))
+                calendar_btn.click()
+                # for debugging
+                time.sleep(5)  # Wait for calendar to open
+                _notify_user("[ACA2000] 📅 Calendar opened", "info")
+                
+                # Step 3b: Navigate to the correct month/year
+                # Get current displayed month/year from calendar header
+                max_navigation_attempts = 12  # Prevent infinite loops
+                for attempt in range(max_navigation_attempts):
+                    try:
+                        # Find the calendar header showing current month/year (e.g., "2026년 1월")
+                        calendar_header = driver.find_element(By.CSS_SELECTOR, ".datepicker-switch, .calendar-header, .datepicker-header, th[class*='switch']")
+                        header_text = calendar_header.text.strip()
+                        _notify_user(f"[ACA2000] Calendar showing: {header_text}", "info")
+                        
+                        # Extract year and month from header (format: "2026년 1월")
+                        import re
+                        match = re.search(r'(\d{4})년\s*(\d{1,2})월', header_text)
+                        if match:
+                            current_year = int(match.group(1))
+                            current_month = int(match.group(2))
+                            
+                            # Check if we're on the correct month
+                            if current_year == target_year and current_month == target_month:
+                                _notify_user(f"[ACA2000] ✅ On correct month: {target_year}-{target_month:02d}", "success")
+                                break
+                            elif (current_year < target_year) or (current_year == target_year and current_month < target_month):
+                                # Need to go forward
+                                next_btn = driver.find_element(By.CSS_SELECTOR, ".next, .calendar-next, button[class*='next'], .arrow-right")
+                                next_btn.click()
+                                time.sleep(0.5)
+                            else:
+                                # Need to go backward
+                                prev_btn = driver.find_element(By.CSS_SELECTOR, ".prev, .calendar-prev, button[class*='prev'], .arrow-left")
+                                prev_btn.click()
+                                time.sleep(0.5)
+                        else:
+                            # Can't parse header, try clicking the date anyway
+                            break
+                    except Exception as e:
+                        _notify_user(f"[ACA2000] ⚠️ Could not navigate calendar: {e}", "warning")
+                        break
+                
+                # Step 3c: Click on the target Saturday date
+                date_cell = wait.until(EC.element_to_be_clickable((
+                    By.XPATH, 
+                    f"//td[not(contains(@class, 'disabled')) and (text()='{target_day}' or contains(text(), '{target_day}'))]"
+                )))
+                _notify_user(f"[ACA2000] Clicking on date: {target_day}", "info")
+                date_cell.click()
+                
+                time.sleep(2)  # Wait for page to reload with selected date
+                _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
+                
+            except Exception as e:
+                _notify_user(f"[ACA2000] ⚠️ Could not select date: {e}", "warning")
+                driver.save_screenshot("aca2000_date_selection_failed.png")
+                _notify_user("[ACA2000] Using current date instead", "info")
             
             # # Step 4: Get all classes and iterate through them
             # _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
