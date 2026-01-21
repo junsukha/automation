@@ -345,7 +345,7 @@ def get_email_from_gmail(gmail_id, gmail_pw):
         list: A list of email subjects.
     """
     all_emails = []
-    date_limit = (datetime.now() - timedelta(days=7)).date()
+    date_limit = (datetime.now() - timedelta(days=3)).date()
     with MailBox('imap.gmail.com').login(gmail_id, gmail_pw) as mailbox:
         for folder in mailbox.folder.list():
             if any(skip in folder.name.upper() for skip in ["TRASH", "SPAM", "DRAFTS"]):
@@ -355,6 +355,52 @@ def get_email_from_gmail(gmail_id, gmail_pw):
             for msg in messages:
                 if msg.subject:
                     all_emails.append(msg.subject)
+    return all_emails
+
+from datetime import datetime, timedelta
+from imap_tools import MailBox, AND, MailboxFolderSelectError
+
+
+def get_email_from_gmail(gmail_id, gmail_pw):
+    """
+    Fetches email subjects from Gmail (last 3 days).
+    """
+    all_emails = []
+    date_limit = (datetime.now() - timedelta(days=3)).date()
+
+    SKIP_KEYWORDS = ["TRASH", "SPAM", "DRAFTS"]
+    SKIP_EXACT = ["[GMAIL]"]  # Gmail root folder (select 불가)
+    TARGET_FOLDERS = ["INBOX", "[Gmail]/All Mail"]
+
+    with MailBox('imap.gmail.com').login(gmail_id, gmail_pw) as mailbox:
+        # for folder in mailbox.folder.list():
+            # folder_name = folder.name
+        for folder_name in TARGET_FOLDERS:
+            
+
+            # 1️⃣ Gmail root 폴더 제거
+            if folder_name.upper() in SKIP_EXACT:
+                continue
+
+            # 2️⃣ 불필요한 폴더 제거
+            if any(skip in folder_name.upper() for skip in SKIP_KEYWORDS):
+                continue
+
+            # 3️⃣ 폴더 선택 안전 처리
+            try:
+                mailbox.folder.set(folder_name)
+            except MailboxFolderSelectError:
+                # 선택 불가능한 폴더 무시
+                continue
+
+            # 4️⃣ 메일 수집
+            for msg in mailbox.fetch(AND(date_gte=date_limit)):
+                if msg.subject:
+                    all_emails.append(msg.subject)
+
+           
+    # show the number of emails for debugging
+    print(f"Fetched {len(all_emails)} emails from {TARGET_FOLDERS}")
     return all_emails
 
 # def get_students_from_aca2000():
@@ -1143,7 +1189,13 @@ if __name__ == "__main__":
     
     # test aca2000 attendance system
     # use stealit.secrets to get the credentials
-    cust_num = st.secrets.get("ACA2000_CUST_NUM")
-    user_id = st.secrets.get("ACA2000_USER_ID")
-    user_pw = st.secrets.get("ACA2000_USER_PW")
-    get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
+    # cust_num = st.secrets.get("ACA2000_CUST_NUM")
+    # user_id = st.secrets.get("ACA2000_USER_ID")
+    # user_pw = st.secrets.get("ACA2000_USER_PW")
+    # get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
+    
+    
+    # test get_email_from_gmail
+    gmail_id = st.secrets.get("GMAIL_ID")
+    gmail_pw = st.secrets.get("GMAIL_PW")
+    get_email_from_gmail(gmail_id, gmail_pw)
