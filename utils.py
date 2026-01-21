@@ -335,10 +335,94 @@ def send_naver_report(send_email_id, user_app_pw, receive_email_id, text):
         _notify_user(f"Email error: {e}", "error")
         return False
     
+def get_email_from_gmail(gmail_id, gmail_pw):
+    """
+    Fetches email from Gmail inbox.
+    Parameters:
+        gmail_id (str): Gmail ID (without @gmail.com).
+        gmail_pw (str): Gmail password.
+    Returns:
+        list: A list of email subjects.
+    """
+    all_emails = []
+    date_limit = (datetime.now() - timedelta(days=7)).date()
+    with MailBox('imap.gmail.com').login(gmail_id, gmail_pw) as mailbox:
+        for folder in mailbox.folder.list():
+            if any(skip in folder.name.upper() for skip in ["TRASH", "SPAM", "DRAFTS"]):
+                continue
+            mailbox.folder.set(folder.name)
+            messages = mailbox.fetch(AND(date_gte=date_limit))
+            for msg in messages:
+                if msg.subject:
+                    all_emails.append(msg.subject)
+    return all_emails
+
+# def get_students_from_aca2000():
+#     # this is for testing purposes
+#     return {
+#         "M7 월금": ["김빛나", "김서준", "이현수"],
+#         "M5 월금": ["김빛나", "김서준", "이현수"],
+#     }
+
+def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, user_pw=None, headless=False):
+    """
+    Fetches available class list (names and IDs) from ACA2000 without fetching student data.
+    This is faster than get_students_from_aca2000() as it only gets the class list.
     
+    Steps:
+    1. Login to ACA2000
+    2. Navigate to 출석부 (Attendance)
+    3. Select latest Saturday date
+    4. Extract class names and IDs
+    
+    Args:
+        aca2000_url (str): Base URL for ACA2000 system
+        cust_num (str): Academy number
+        user_id (str): User ID
+        user_pw (str): User password
+        headless (bool): Whether to run in headless mode
+    
+    Returns:
+        dict: Dictionary with class names as keys and class IDs as values
+        Example: {"M7 월금": "2246", "M5 월금": "2247", ...}
+    """
+    # TODO: Implement this function
+    # For now, return test data
+    return {
+        "M7 월금": "2246",
+        "M5 월금": "2247",
+        "M6-3 월금": "2248",
+        "M6-2 월금": "2249",
+    }
+
+def get_students_for_classes(class_ids, aca2000_url=None, cust_num=None, user_id=None, user_pw=None, headless=False):
+    """
+    Fetches student lists for specific classes only.
+    Use this after get_class_list_from_aca2000() to fetch only selected classes.
+    
+    Args:
+        class_ids (dict): Dictionary of class names to class IDs (from get_class_list_from_aca2000)
+                         Example: {"M7 월금": "2246", "M5 월금": "2247"}
+        aca2000_url (str): Base URL for ACA2000 system
+        cust_num (str): Academy number
+        user_id (str): User ID
+        user_pw (str): User password
+        headless (bool): Whether to run in headless mode
+    
+    Returns:
+        dict: Dictionary with class names as keys and lists of student names as values
+        Example: {"M7 월금": ["김빛나", "김서준", ...], "M5 월금": [...]}
+    """
+    # TODO: Implement this function
+    # For now, return test data
+    result = {}
+    for class_name in class_ids.keys():
+        result[class_name] = ["김빛나", "김서준", "이현수"]
+    return result
+
 def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, user_pw=None, headless=False):
     """
-    Fetches student lists from ACA2000 attendance system for each class.
+    Fetches student lists from ACA2000 attendance system for ALL classes.
     
     ⚠️ READ-ONLY MODE: This function only READS data and does NOT modify any information.
     All write operations (attendance buttons, edit buttons, save buttons) are disabled.
@@ -347,7 +431,7 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
     1. Login to ACA2000 at https://t.aca2000.co.kr/
     2. Click 출석부 (Attendance) menu
     3. Select the latest Saturday date
-    4. Select a class from the class list
+    4. Get all classes and fetch students for each
     5. Extract student names who participated
     
     Args:
@@ -703,96 +787,120 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
                 driver.save_screenshot("aca2000_date_selection_failed.png")
                 _notify_user("[ACA2000] Using current date instead", "info")
             
-            # # Step 4: Get all classes and iterate through them
-            # _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
-            # try:
-            #     # Wait for class list to be visible
-            #     wait.until(EC.presence_of_element_located((
-            #         By.CSS_SELECTOR, 
-            #         ".반목록, #반목록, .class-list, .depth1, li.depth1"
-            #     )))
+            # Step 4: Get all classes with their IDs
+            _notify_user("[ACA2000] Step 4: Fetching class list...", "info")
+            try:
+                # Wait for class list to be visible
+                wait.until(EC.presence_of_element_located((
+                    By.CSS_SELECTOR, 
+                    ".반목록, #반목록, .class-list, .depth1, li.depth1"
+                )))
                 
-            #     # Find all class links/items
-            #     class_elements = driver.find_elements(By.CSS_SELECTOR, 
-            #         "li.depth1 a, .class-item, .반목록 li a, a[onclick*='selectClass']"
-            #     )
+                # Find all class links/items with onclick="selectClass(ID)"
+                # HTML structure: <a href="#" class="depth1" onclick="selectClass(2246)">
+                #                   <span id="2246">M5 월금</span>
+                #                 </a>
+                class_elements = driver.find_elements(By.CSS_SELECTOR, 
+                    "a[onclick*='selectClass']"
+                )
                 
-            #     if not class_elements:
-            #         # Try alternative selectors
-            #         class_elements = driver.find_elements(By.CSS_SELECTOR, 
-            #             "ul li a span.name, .attendL .class-name"
-            #         )
+                class_info = {}  # {class_name: class_id}
+                for elem in class_elements:
+                    try:
+                        # Get class name from the span inside the link
+                        class_name = elem.text.strip()
+                        
+                        # Extract class ID from onclick="selectClass(2246)"
+                        onclick_attr = elem.get_attribute("onclick")
+                        if onclick_attr and "selectClass" in onclick_attr:
+                            # Extract ID from "selectClass(2246)"
+                            import re
+                            match = re.search(r'selectClass\((\d+)\)', onclick_attr)
+                            if match:
+                                class_id = match.group(1)
+                                if class_name and class_name not in class_info:
+                                    class_info[class_name] = class_id
+                                    _notify_user(f"[ACA2000] Found class: {class_name} (ID: {class_id})", "info")
+                    except Exception as e:
+                        _notify_user(f"[ACA2000] ⚠️ Could not parse class element: {e}", "warning")
+                        continue
                 
-            #     class_names = []
-            #     for elem in class_elements:
-            #         class_name = elem.text.strip()
-            #         if class_name and class_name not in class_names:
-            #             class_names.append(class_name)
+                _notify_user(f"[ACA2000] ✅ Found {len(class_info)} classes", "success")
                 
-            #     _notify_user(f"[ACA2000] ✅ Found {len(class_names)} classes", "success")
-                
-            # except Exception as e:
-            #     _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
-            #     class_names = []
+            except Exception as e:
+                _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
+                class_info = {}
             
-            # # Step 5: For each class, select it and extract student list
-            # for class_name in class_names:
-            #     try:
-            #         _notify_user(f"[ACA2000] Processing class: {class_name}...", "info")
+            # Step 5: For each class, select it and extract student list
+            for class_name, class_id in class_info.items():
+                try:
+                    _notify_user(f"[ACA2000] Processing class: {class_name} (ID: {class_id})...", "info")
                     
-            #         # Click on the class
-            #         class_link = wait.until(EC.element_to_be_clickable((
-            #             By.XPATH, 
-            #             f"//a[contains(text(), '{class_name}') or .//span[text()='{class_name}']]"
-            #         )))
-            #         class_link.click()
-            #         time.sleep(1)  # Wait for class selection to load students
+                    # Click on the class using JavaScript to trigger selectClass(ID)
+                    driver.execute_script(f"selectClass({class_id});")
+                    time.sleep(2)  # Wait for class selection to load students
                     
-            #         # Extract student names who participated (READ-ONLY - no modifications)
-            #         try:
-            #             # Note: Read-only mode is already active from driver initialization
-            #             # MutationObserver automatically handles dynamically loaded buttons
+                    # Extract student names who ATTENDED (green "출석" button)
+                    try:
+                        # Wait for student list to load
+                        wait.until(EC.presence_of_element_located((
+                            By.CSS_SELECTOR, 
+                            "span.name[onclick*='showDetail']"
+                        )))
                         
-            #             # Find student list - students are typically in spans with class "name"
-            #             # IMPORTANT: We only READ text, never click attendance buttons
-            #             student_elements = driver.find_elements(By.CSS_SELECTOR, 
-            #                 ".attendL .name, span.name, .student-name, .infoLine .name"
-            #             )
+                        # Find all student name elements
+                        # Structure: <span class="name" onclick="showDetail(...)">김나영</span>
+                        student_name_elements = driver.find_elements(By.CSS_SELECTOR, 
+                            "span.name[onclick*='showDetail']"
+                        )
                         
-            #             students = []
-            #             for student_elem in student_elements:
-            #                 student_name = student_elem.text.strip()
-            #                 if student_name and student_name not in students:
-            #                     # READ-ONLY: Only extract text, never interact with buttons
-            #                     # Check parent to see if student has attendance status (visual check only)
-            #                     try:
-            #                         parent = student_elem.find_element(By.XPATH, "./..")
-            #                         # Look for attendance indicators (read-only check)
-            #                         # We check for active/highlighted buttons but NEVER click them
-            #                         parent.find_elements(By.CSS_SELECTOR, 
-            #                             ".btn_attend.active, .attendance.active, button.active"
-            #                         )
-            #                         # If indicators found or not, we just read the name
-            #                         students.append(student_name)
-            #                     except Exception:
-            #                         # If we can't check, just read the name anyway
-            #                         students.append(student_name)
+                        students = []
+                        for student_elem in student_name_elements:
+                            student_name = student_elem.text.strip()
+                            if not student_name:
+                                continue
+                            
+                            try:
+                                # Find the attendance button for this student
+                                # The button should be in the same row/parent container
+                                # Look for green "출석" button: <button class="att_btn on01s" value="출석">출석</button>
+                                parent_row = student_elem.find_element(By.XPATH, "./ancestor::tr | ./ancestor::div[contains(@class, 'row')]")
+                                
+                                # Check if there's a green "출석" button (on01s class indicates green/attended)
+                                attended_buttons = parent_row.find_elements(By.CSS_SELECTOR, 
+                                    "button.att_btn.on01s[value='출석'], button.on01s[value='출석']"
+                                )
+                                
+                                if attended_buttons:
+                                    # Student has green "출석" status
+                                    if student_name not in students:
+                                        students.append(student_name)
+                                        _notify_user(f"[ACA2000]   ✓ {student_name} - 출석", "info")
+                                else:
+                                    _notify_user(f"[ACA2000]   ✗ {student_name} - not attended", "info")
+                                    
+                            except Exception as e:
+                                _notify_user(f"[ACA2000] ⚠️ Could not check attendance for {student_name}: {e}", "warning")
+                                continue
                         
-            #             if students:
-            #                 all_students[class_name] = students
-            #                 _notify_user(f"[ACA2000] ✅ Found {len(students)} students in {class_name}", "success")
-            #             else:
-            #                 _notify_user(f"[ACA2000] ⚠️ No students found for {class_name}", "warning")
+                        if students:
+                            all_students[class_name] = students
+                            _notify_user(f"[ACA2000] ✅ Found {len(students)} attended students in {class_name}", "success")
+                        else:
+                            all_students[class_name] = []
+                            _notify_user(f"[ACA2000] ⚠️ No attended students found for {class_name}", "warning")
                     
-            #         except Exception as e:
-            #             _notify_user(f"[ACA2000] ⚠️ Error extracting students for {class_name}: {e}", "warning")
-            #             continue
+                    except Exception as e:
+                        _notify_user(f"[ACA2000] ⚠️ Error extracting students for {class_name}: {e}", "warning")
+                        all_students[class_name] = []
+                        continue
                 
-            #     except Exception as e:
-            #         _notify_user(f"[ACA2000] ⚠️ Error processing class {class_name}: {e}", "warning")
-            #         continue
+                except Exception as e:
+                    _notify_user(f"[ACA2000] ⚠️ Error processing class {class_name}: {e}", "warning")
+                    all_students[class_name] = []
+                    continue
             
-            _notify_user(f"[ACA2000] ✅ Completed! Found students from {len(all_students)} classes", "success")
+            _notify_user(f"[ACA2000] ✅ Completed! Processed {len(all_students)} classes", "success")
             return all_students
             
         except Exception as e:
