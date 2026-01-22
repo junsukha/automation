@@ -1018,6 +1018,69 @@ def get_headless_stealth_driver():
 
     return driver
 
+# TODO:https://www.luck7owl.com/it/python/selenium-%EB%84%A4%EC%9D%B4%EB%B2%84-%EB%A1%9C%EA%B7%B8%EC%9D%B8headless%EB%AA%A8%EB%93%9C/
+def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_passkey=None):
+    """
+    Logs into Naver using Selenium WebDriver.
+    Parameters:
+        headless (bool): Whether to run the browser in headless mode.
+        naver_id (str): Naver login ID.
+        naver_passkey (str): Naver login password or app password.
+    """
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+
+    _id = "아이디"
+    _pw = "비밀번호"
+    if not naver_id:
+        _id = st.secrets.get("NAVER_ID")
+    if not naver_passkey:
+        _pw = st.secrets.get("NAVER_PW")
+        
+    options = Options()
+    # options.add_argument("--headless")
+    options.add_argument(
+        'user-agent=Mozilla/5.0(Windows NT 10.0; Win64; x64) AppleWebKit/537.36(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    )
+
+    driver = webdriver.Chrome(options=options)
+    wait = WebDriverWait(driver, 10)  # Wait up to 10 seconds
+    
+    try:
+        driver.get("https://nid.naver.com/nidlogin.login")
+
+        # Wait for ID input to be present and interactable
+        id_input = wait.until(EC.presence_of_element_located((By.ID, "id")))
+        id_input.click()
+        driver.execute_script(f"document.getElementById('id').value = '{_id}';")
+        driver.save_screenshot("naver_login_id.png")
+
+        # Wait for password input to be present and interactable
+        pw_input = wait.until(EC.presence_of_element_located((By.ID, "pw")))
+        driver.execute_script(f"document.getElementById('pw').value = '{_pw}';")
+        pw_input.click()
+        driver.save_screenshot("naver_login_pw.png")
+
+        # Wait for login button to be clickable
+        login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
+        login_button.click()
+        driver.save_screenshot("naver_login_button.png")
+
+        # Wait for login to complete (check for URL change or specific element)
+        wait.until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
+        
+        _notify_user("[Naver] ✅ Login successful", "success")
+        
+    except Exception as e:
+        _notify_user(f"[Naver] ❌ Login failed: {e}", "error")
+        driver.save_screenshot("naver_login_error.png")
+    finally:
+        driver.quit()
+
 # test using webdriver before implementing aca2000 logics
 def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=None):
     """
@@ -1196,6 +1259,10 @@ if __name__ == "__main__":
     
     
     # test get_email_from_gmail
-    gmail_id = st.secrets.get("GMAIL_ID")
-    gmail_pw = st.secrets.get("GMAIL_PW")
-    get_email_from_gmail(gmail_id, gmail_pw)
+    # gmail_id = st.secrets.get("GMAIL_ID")
+    # gmail_pw = st.secrets.get("GMAIL_PW")
+    # get_email_from_gmail(gmail_id, gmail_pw)
+    
+    
+    # test login_naver_selenium
+    login_naver_selenium()
