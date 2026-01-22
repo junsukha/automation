@@ -1042,7 +1042,7 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         _pw = st.secrets.get("NAVER_PW")
         
     options = Options()
-    # options.add_argument("--headless")
+    options.add_argument("--headless")
     options.add_argument(
         'user-agent=Mozilla/5.0(Windows NT 10.0; Win64; x64) AppleWebKit/537.36(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
     )
