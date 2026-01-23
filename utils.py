@@ -1018,68 +1018,235 @@ def get_headless_stealth_driver():
 
     return driver
 
+def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passkey=None):
+    """
+    Fetches Naver email using Selenium WebDriver.
+    Parameters:
+        headless (bool): Whether to run the browser in headless mode.
+        stealth (bool): Whether to use stealth mode to avoid bot detection.
+        naver_id (str): Naver login ID.
+        naver_passkey (str): Naver login password or app password.
+    Returns:
+        list: List of dicts with sender and subject from recent emails
+              Example: [{"sender": "example@naver.com", "subject": "Hello"}, ...]
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import random
+
+    email_list = []
+    
+    # Step 1: Login to Naver using the reusable function
+    driver = login_naver_selenium( # this driver has already logged in
+        headless=headless, 
+        stealth=stealth, 
+        naver_id=naver_id, 
+        naver_passkey=naver_passkey
+    )
+    
+    if not driver:
+        _notify_user("[Naver] ❌ Login failed, cannot fetch emails", "error")
+        return email_list
+    
+    wait = WebDriverWait(driver, 10)
+    
+    try:
+        # Add random delay to appear more human-like
+        time.sleep(random.uniform(1.5, 3.0))
+
+        # Step 2: Navigate to Naver Mail
+        _notify_user("[Naver] Navigating to mail...", "info")
+        driver.get("https://mail.naver.com/")
+
+        # Random delay after navigation
+        time.sleep(random.uniform(2.0, 4.0))
+
+        # Wait for mail list to load (using actual Naver Mail structure)
+        wait.until(EC.presence_of_element_located((
+            By.CSS_SELECTOR,
+            "ol.mail_list, #mail_list_wrap, li.mail_item"
+        )))
+
+        # Add another small random delay before extracting
+        time.sleep(random.uniform(0.5, 1.5))
+
+        # Step 3: Extract email subjects
+        _notify_user("[Naver] Fetching emails...", "info")
+
+        # Get all mail items using the actual Naver Mail structure
+        mail_items = driver.find_elements(By.CSS_SELECTOR, "li.mail_item")
+
+        if not mail_items:
+            _notify_user("[Naver] ⚠️ No mail items found", "warning")
+
+        for mail_item in mail_items[:20]:  # Get last 20 emails
+            try:
+                # Extract sender (from actual Naver Mail HTML structure)
+                sender = None
+                sender_selectors = [
+                    "div.mail_sender",  # Confirmed from actual HTML
+                    "button.toggle_conversation_mail",  # Alternative location
+                    "span.mail_sender",
+                    "[class*='sender']"
+                ]
+
+                for selector in sender_selectors:
+                    try:
+                        sender_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
+                        if sender_elem and sender_elem.text.strip():
+                            sender = sender_elem.text.strip()
+                            # Clean up sender text (remove date if present)
+                            sender_lines = [line.strip() for line in sender.split('\n') if line.strip()]
+                            if sender_lines:
+                                # Take first line that doesn't look like a date (format: 01-21)
+                                for line in sender_lines:
+                                    if not line.replace('-', '').replace('.', '').isdigit():
+                                        sender = line
+                                        break
+                            break
+                    except Exception:
+                        continue
+
+                # Extract subject
+                subject = None
+                subject_selectors = [
+                    "div.mail_title",  # Confirmed from actual Naver Mail HTML
+                    "span.mail_title",
+                    "strong.mail_title",
+                    "div.mail_inner",
+                    "a.mail_subject",
+                    "span.subject",
+                    "[class*='subject']",
+                    "[class*='title']"
+                ]
+
+                for selector in subject_selectors:
+                    try:
+                        subject_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
+                        if subject_elem and subject_elem.text.strip():
+                            subject = subject_elem.text.strip()
+                            # Split by newlines and take first non-empty line
+                            subject_lines = [line.strip() for line in subject.split('\n') if line.strip()]
+                            if subject_lines:
+                                subject = subject_lines[0]
+                            break
+                    except Exception:
+                        continue
+
+                # Add to list if we have at least a subject
+                if subject:
+                    email_data = {
+                        "sender": sender if sender else "Unknown",
+                        "subject": subject
+                    }
+                    # Check for duplicates based on sender+subject combination
+                    is_duplicate = any(
+                        e["sender"] == email_data["sender"] and e["subject"] == email_data["subject"]
+                        for e in email_list
+                    )
+                    if not is_duplicate:
+                        email_list.append(email_data)
+                        _notify_user(f"[Naver]   • {sender if sender else 'Unknown'}: {subject}", "info")
+
+            except Exception as e:
+                _notify_user(f"[Naver] ⚠️ Could not extract email: {type(e).__name__}", "warning")
+                continue
+
+        _notify_user(f"[Naver] ✅ Fetched {len(email_list)} emails", "success")
+        
+    except Exception as e:
+        _notify_user(f"[Naver] ❌ Error: {e}", "error")
+        driver.save_screenshot("naver_email_error.png")
+    finally:
+        driver.quit()
+
+    return email_list
+    
+    
+
+
 # TODO:https://www.luck7owl.com/it/python/selenium-%EB%84%A4%EC%9D%B4%EB%B2%84-%EB%A1%9C%EA%B7%B8%EC%9D%B8headless%EB%AA%A8%EB%93%9C/
 def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_passkey=None):
     """
-    Logs into Naver using Selenium WebDriver.
+    Logs into Naver using Selenium WebDriver and returns the driver.
+
     Parameters:
         headless (bool): Whether to run the browser in headless mode.
+        stealth (bool): Whether to use stealth mode to avoid bot detection.
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
+
+    Returns:
+        webdriver: Logged-in Chrome WebDriver instance, or None if login failed.
     """
     from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
+    import random
 
 
-    _id = "아이디"
-    _pw = "비밀번호"
-    if not naver_id:
-        _id = st.secrets.get("NAVER_ID")
-    if not naver_passkey:
-        _pw = st.secrets.get("NAVER_PW")
-        
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument(
-        'user-agent=Mozilla/5.0(Windows NT 10.0; Win64; x64) AppleWebKit/537.36(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    )
+    _id = naver_id if naver_id else st.secrets.get("NAVER_ID")
+    _pw = naver_passkey if naver_passkey else st.secrets.get("NAVER_PW")
 
-    driver = webdriver.Chrome(options=options)
+    # Use stealth mode if requested and headless
+    if headless and stealth:
+        driver = get_headless_stealth_driver()
+    else:
+        options = Options()
+        if headless:
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+        options.add_argument(
+            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        )
+        driver = webdriver.Chrome(options=options)
+
     wait = WebDriverWait(driver, 10)  # Wait up to 10 seconds
     
     try:
         driver.get("https://nid.naver.com/nidlogin.login")
 
+        # Random delay to appear more human-like
+        time.sleep(random.uniform(1.0, 2.5))
+
         # Wait for ID input to be present and interactable
         id_input = wait.until(EC.presence_of_element_located((By.ID, "id")))
         id_input.click()
-        driver.execute_script(f"document.getElementById('id').value = '{_id}';")
-        driver.save_screenshot("naver_login_id.png")
+        time.sleep(random.uniform(0.3, 0.8))
+        driver.execute_script("arguments[0].value = arguments[1];", id_input, _id)
+
+        # Random delay between fields
+        time.sleep(random.uniform(0.5, 1.2))
 
         # Wait for password input to be present and interactable
         pw_input = wait.until(EC.presence_of_element_located((By.ID, "pw")))
-        driver.execute_script(f"document.getElementById('pw').value = '{_pw}';")
+        driver.execute_script("arguments[0].value = arguments[1];", pw_input, _pw)
         pw_input.click()
-        driver.save_screenshot("naver_login_pw.png")
+        time.sleep(random.uniform(0.3, 0.8))
+
+        # Random delay before clicking login
+        time.sleep(random.uniform(0.5, 1.5))
 
         # Wait for login button to be clickable
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
         login_button.click()
-        driver.save_screenshot("naver_login_button.png")
 
         # Wait for login to complete (check for URL change or specific element)
         wait.until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
         
         _notify_user("[Naver] ✅ Login successful", "success")
+        return driver  # Return the logged-in driver
         
     except Exception as e:
         _notify_user(f"[Naver] ❌ Login failed: {e}", "error")
         driver.save_screenshot("naver_login_error.png")
-    finally:
         driver.quit()
+        return None
 
 # test using webdriver before implementing aca2000 logics
 def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=None):
