@@ -1170,11 +1170,60 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                     except Exception:
                         continue
 
+                # Extract email content by clicking and reading
+                content = None
+                if subject:
+                    try:
+                        # Click on the email title link to open the email
+                        title_link = mail_item.find_element(By.CSS_SELECTOR, "a.mail_title_link")
+                        title_link.click()
+
+                        # Wait for email content to load
+                        time.sleep(random.uniform(1.0, 2.0))
+                        wait.until(EC.presence_of_element_located((
+                            By.CSS_SELECTOR,
+                            "div.mail_view_contents_inner, div.mail_view_contents"
+                        )))
+
+                        # Extract content
+                        content_selectors = [
+                            "div.mail_view_contents_inner",
+                            "div.mail_view_contents"
+                        ]
+                        for content_selector in content_selectors:
+                            try:
+                                content_elem = driver.find_element(By.CSS_SELECTOR, content_selector)
+                                if content_elem and content_elem.text.strip():
+                                    content = content_elem.text.strip()
+                                    break
+                            except Exception:
+                                continue
+
+                        # Go back to mail list
+                        driver.back()
+                        time.sleep(random.uniform(1.0, 2.0))
+
+                        # Wait for mail list to reload
+                        wait.until(EC.presence_of_element_located((
+                            By.CSS_SELECTOR,
+                            "ul.mail_list, li.mail_item"
+                        )))
+
+                    except Exception as e:
+                        _notify_user(f"[Naver] ⚠️ Could not fetch content: {type(e).__name__}", "warning")
+                        # Try to go back if we're stuck
+                        try:
+                            driver.back()
+                            time.sleep(1.0)
+                        except:
+                            pass
+
                 # Add to list if we have at least a subject
                 if subject:
                     email_data = {
                         "sender": sender if sender else "Unknown",
-                        "subject": subject
+                        "subject": subject,
+                        "content": content if content else ""
                     }
                     # Check for duplicates based on sender+subject combination
                     is_duplicate = any(
