@@ -1071,7 +1071,30 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Add another small random delay before extracting
         time.sleep(random.uniform(0.5, 1.5))
 
-        # Step 3: Extract email subjects
+        # Step 3: Apply unread filter
+        _notify_user("[Naver] Applying unread filter...", "info")
+        try:
+            # Click the filter button
+            filter_button = wait.until(EC.element_to_be_clickable((
+                By.CSS_SELECTOR,
+                "button.button_task_dropdown_on, button[class*='button_filter'], button:has(span.text:contains('필터'))"
+            )))
+            filter_button.click()
+            time.sleep(random.uniform(0.5, 1.0))
+
+            # Click the unread filter option
+            unread_option = wait.until(EC.element_to_be_clickable((
+                By.XPATH,
+                "//button[contains(text(), '안읽은 메일') or contains(@class, 'context_item')]"
+            )))
+            unread_option.click()
+            time.sleep(random.uniform(1.0, 2.0))
+
+            _notify_user("[Naver] Unread filter applied", "info")
+        except Exception as e:
+            _notify_user(f"[Naver] ⚠️ Could not apply unread filter: {str(e)}", "warning")
+
+        # Step 4: Extract email subjects
         _notify_user("[Naver] Fetching emails...", "info")
 
         # Get all mail items using the actual Naver Mail structure
