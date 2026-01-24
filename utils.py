@@ -1074,18 +1074,18 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Step 3: Apply unread filter
         _notify_user("[Naver] Applying unread filter...", "info")
         try:
-            # Click the filter button
+            # Click the filter button (필터)
             filter_button = wait.until(EC.element_to_be_clickable((
                 By.CSS_SELECTOR,
-                "button.button_task_dropdown_on, button[class*='button_filter'], button:has(span.text:contains('필터'))"
+                "div.button_filter button.button_task_dropdown"
             )))
             filter_button.click()
             time.sleep(random.uniform(0.5, 1.0))
 
-            # Click the unread filter option
+            # Click the unread filter option (안읽은 메일)
             unread_option = wait.until(EC.element_to_be_clickable((
                 By.XPATH,
-                "//button[contains(text(), '안읽은 메일') or contains(@class, 'context_item')]"
+                "//button[contains(@class, 'button_context_item') and contains(., '안읽은 메일')]"
             )))
             unread_option.click()
             time.sleep(random.uniform(1.0, 2.0))
@@ -1102,39 +1102,52 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
 
         if not mail_items:
             _notify_user("[Naver] ⚠️ No mail items found", "warning")
+        else:
+            _notify_user(f"[Naver] Found {len(mail_items)} mail items", "info")
 
         for mail_item in mail_items[:20]:  # Get last 20 emails
             try:
                 # Extract sender (from actual Naver Mail HTML structure)
                 sender = None
-                sender_selectors = [
-                    "div.mail_sender",  # Confirmed from actual HTML
-                    "button.toggle_conversation_mail",  # Alternative location
-                    "span.mail_sender",
-                    "[class*='sender']"
-                ]
-
-                for selector in sender_selectors:
-                    try:
-                        sender_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
-                        if sender_elem and sender_elem.text.strip():
-                            sender = sender_elem.text.strip()
-                            # Clean up sender text (remove date if present)
-                            sender_lines = [line.strip() for line in sender.split('\n') if line.strip()]
-                            if sender_lines:
-                                # Take first line that doesn't look like a date (format: 01-21)
-                                for line in sender_lines:
-                                    if not line.replace('-', '').replace('.', '').isdigit():
-                                        sender = line
-                                        break
-                            break
-                    except Exception:
-                        continue
+                try:
+                    # First try button.button_sender with title attribute
+                    sender_elem = mail_item.find_element(By.CSS_SELECTOR, "button.button_sender")
+                    if sender_elem:
+                        # Get sender from title attribute (contains email)
+                        sender = sender_elem.get_attribute("title")
+                        if sender:
+                            sender = sender.strip().strip('<>')  # Remove < > brackets if present
+                except Exception:
+                    # Fallback to other selectors
+                    sender_selectors = [
+                        "div.mail_sender",
+                        "button.toggle_conversation_mail",
+                        "span.mail_sender",
+                        "[class*='sender']"
+                    ]
+                    for selector in sender_selectors:
+                        try:
+                            sender_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
+                            if sender_elem and sender_elem.text.strip():
+                                sender = sender_elem.text.strip()
+                                # Clean up sender text (remove date if present)
+                                sender_lines = [line.strip() for line in sender.split('\n') if line.strip()]
+                                if sender_lines:
+                                    # Take first line that doesn't look like a date (format: 01-21)
+                                    for line in sender_lines:
+                                        if not line.replace('-', '').replace('.', '').isdigit():
+                                            sender = line
+                                            break
+                                break
+                        except Exception:
+                            continue
 
                 # Extract subject
                 subject = None
                 subject_selectors = [
-                    "div.mail_title",  # Confirmed from actual Naver Mail HTML
+                    "div.mail_title span.text",  # Actual subject text element
+                    "a.mail_title_link span.text",  # Alternative path to subject
+                    "div.mail_title",
                     "span.mail_title",
                     "strong.mail_title",
                     "div.mail_inner",
@@ -1175,6 +1188,9 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
             except Exception as e:
                 _notify_user(f"[Naver] ⚠️ Could not extract email: {type(e).__name__}", "warning")
                 continue
+
+        # print the email list for debugging
+        print(f"Email list: {email_list}")
 
         _notify_user(f"[Naver] ✅ Fetched {len(email_list)} emails", "success")
         
@@ -1455,4 +1471,10 @@ if __name__ == "__main__":
     
     
     # test login_naver_selenium
-    login_naver_selenium()
+    # login_naver_selenium()
+    
+    # test fetch_naver_email
+    # use stealit.secrets to get the credentials
+    naver_id = st.secrets.get("NAVER_ID")
+    naver_passkey = st.secrets.get("NAVER_PW")
+    fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
