@@ -1027,8 +1027,8 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
     Returns:
-        list: List of dicts with sender and subject from recent emails
-              Example: [{"sender": "example@naver.com", "subject": "Hello"}, ...]
+        list: List of dicts with sender, subject, content, and attachments from recent emails
+              Example: [{"sender": "example@naver.com", "subject": "Hello", "content": "...", "attachments": ["a.pdf"]}, ...]
     """
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
@@ -1036,6 +1036,104 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
     import random
 
     email_list = []
+
+    def _extract_attachment_names(driver):
+        names = set()
+
+        def _add_name(value):
+            if not value:
+                return
+            text = value.strip()
+            if not text:
+                return
+            text = text.splitlines()[0].strip()
+            if text:
+                names.add(text)
+
+        container_selectors = [
+            "div.mail_view_attachment_area",
+            "div.mail_view_attachment",
+            "div.attachment",
+            "div.file_area",
+            "div.file_attachments",
+            "div.file_attachments_inner",
+            "ul.mail_view_attachment_list",
+            "ul.attach_list",
+            "ul.file_list",
+            "li.file_item",
+        ]
+
+        # Note: span.text and span.file_extension are handled separately
+        # in the combined logic below, so they're not included here
+        name_selectors = [
+            "span.file_name",
+            "em.file_name",
+            "strong.file_name",
+            "span.filename",
+            "a.file_download",
+            "a.button_download",
+            "a.link_download",
+            "a[download]",
+        ]
+
+        elements = []
+        for selector in container_selectors:
+            try:
+                elements.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+            except Exception:
+                continue
+
+        if elements:
+            for container in elements:
+                try:
+                    for item in container.find_elements(By.CSS_SELECTOR, "li.file_item"):
+                        base = None
+                        ext = None
+                        try:
+                            base_elem = item.find_element(By.CSS_SELECTOR, "strong.file_title span.text")
+                            base = base_elem.text.strip()
+                        except Exception:
+                            base = None
+                        try:
+                            ext_elem = item.find_element(By.CSS_SELECTOR, "strong.file_title span.file_extension")
+                            ext = ext_elem.text.strip()
+                        except Exception:
+                            ext = None
+
+                        if base and ext:
+                            _add_name(f"{base}{ext}")
+                        elif base:
+                            _add_name(base)
+                except Exception:
+                    pass
+
+                for selector in name_selectors:
+                    try:
+                        for elem in container.find_elements(By.CSS_SELECTOR, selector):
+                            _add_name(elem.text)
+                            _add_name(elem.get_attribute("title"))
+                            _add_name(elem.get_attribute("download"))
+                            _add_name(elem.get_attribute("aria-label"))
+                            _add_name(elem.get_attribute("data-file-name"))
+                            _add_name(elem.get_attribute("data-filename"))
+                            _add_name(elem.get_attribute("data-name"))
+                    except Exception:
+                        continue
+        else:
+            for selector in name_selectors:
+                try:
+                    for elem in driver.find_elements(By.CSS_SELECTOR, selector):
+                        _add_name(elem.text)
+                        _add_name(elem.get_attribute("title"))
+                        _add_name(elem.get_attribute("download"))
+                        _add_name(elem.get_attribute("aria-label"))
+                        _add_name(elem.get_attribute("data-file-name"))
+                        _add_name(elem.get_attribute("data-filename"))
+                        _add_name(elem.get_attribute("data-name"))
+                except Exception:
+                    continue
+
+        return sorted(names)
     
     # Step 1: Login to Naver using the reusable function
     driver = login_naver_selenium( # this driver has already logged in
@@ -1071,42 +1169,31 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Add another small random delay before extracting
         time.sleep(random.uniform(0.5, 1.5))
 
-        # Step 3: Apply unread filter
-        _notify_user("[Naver] Applying unread filter...", "info")
-        try:
-            # Click the filter button (필터)
-            filter_button = wait.until(EC.element_to_be_clickable((
-                By.CSS_SELECTOR,
-                "div.button_filter button.button_task_dropdown"
-            )))
-            filter_button.click()
-            time.sleep(random.uniform(0.5, 1.0))
-
-            # Click the unread filter option (안읽은 메일)
-            unread_option = wait.until(EC.element_to_be_clickable((
-                By.XPATH,
-                "//button[contains(@class, 'button_context_item') and contains(., '안읽은 메일')]"
-            )))
-            unread_option.click()
-            time.sleep(random.uniform(1.0, 2.0))
-
-            _notify_user("[Naver] Unread filter applied", "info")
-        except Exception as e:
-            _notify_user(f"[Naver] ⚠️ Could not apply unread filter: {str(e)}", "warning")
-
-        # Step 4: Extract email subjects
+        # Step 3: Extract email subjects (only unread emails via CSS selector)
         _notify_user("[Naver] Fetching emails...", "info")
 
-        # Get all mail items using the actual Naver Mail structure
-        mail_items = driver.find_elements(By.CSS_SELECTOR, "li.mail_item")
+        # Get unread mail items only (those without the 'read' class)
+        mail_items = driver.find_elements(By.CSS_SELECTOR, "li.mail_item:not(.read)")
 
         if not mail_items:
-            _notify_user("[Naver] ⚠️ No mail items found", "warning")
+            _notify_user("[Naver] ⚠️ No unread mail items found", "warning")
         else:
-            _notify_user(f"[Naver] Found {len(mail_items)} mail items", "info")
+            _notify_user(f"[Naver] Found {len(mail_items)} unread mail items", "info")
 
-        for mail_item in mail_items[:20]:  # Get last 20 emails
+        # Keep track of processed email IDs to mark as unread later
+        processed_mail_ids = []
+
+        # TODO: fetch only emails received within last 7 days
+        for mail_item in mail_items[:5]:  # Get last 20 emails
             try:
+                # Get the mail ID from the class attribute (e.g., "mail-25317")
+                mail_id = None
+                class_attr = mail_item.get_attribute("class")
+                if class_attr:
+                    for cls in class_attr.split():
+                        if cls.startswith("mail-"):
+                            mail_id = cls
+                            break
                 # Extract sender (from actual Naver Mail HTML structure)
                 sender = None
                 try:
@@ -1172,6 +1259,7 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
 
                 # Extract email content by clicking and reading
                 content = None
+                attachments = []
                 if subject:
                     try:
                         # Click on the email title link to open the email
@@ -1199,6 +1287,8 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                             except Exception:
                                 continue
 
+                        attachments = _extract_attachment_names(driver)
+
                         # Go back to mail list
                         driver.back()
                         time.sleep(random.uniform(1.0, 2.0))
@@ -1209,13 +1299,17 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                             "ul.mail_list, li.mail_item"
                         )))
 
+                        # Track mail_id for later checkbox selection
+                        if content and mail_id:
+                            processed_mail_ids.append(mail_id)
+
                     except Exception as e:
                         _notify_user(f"[Naver] ⚠️ Could not fetch content: {type(e).__name__}", "warning")
                         # Try to go back if we're stuck
                         try:
                             driver.back()
                             time.sleep(1.0)
-                        except:
+                        except Exception:
                             pass
 
                 # Add to list if we have at least a subject
@@ -1223,7 +1317,8 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                     email_data = {
                         "sender": sender if sender else "Unknown",
                         "subject": subject,
-                        "content": content if content else ""
+                        "content": content if content else "",
+                        "attachments": attachments
                     }
                     # Check for duplicates based on sender+subject combination
                     is_duplicate = any(
@@ -1238,8 +1333,39 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                 _notify_user(f"[Naver] ⚠️ Could not extract email: {type(e).__name__}", "warning")
                 continue
 
-        # print the email list for debugging
-        print(f"Email list: {email_list}")
+        # Check checkboxes for all processed emails, then mark as unread
+        if processed_mail_ids:
+            _notify_user(f"[Naver] Selecting {len(processed_mail_ids)} emails...", "info")
+            checked_count = 0
+            for mail_id in processed_mail_ids:
+                try:
+                    mail_item = driver.find_element(By.CSS_SELECTOR, f"li.{mail_id}")
+                    checkbox = mail_item.find_element(By.CSS_SELECTOR, "label[role='checkbox']")
+                    if checkbox.get_attribute("aria-checked") != "true":
+                        checkbox.click()
+                        time.sleep(random.uniform(0.2, 0.4))
+                    checked_count += 1
+                except Exception as e:
+                    _notify_user(f"[Naver] ⚠️ Could not check {mail_id}: {type(e).__name__}", "warning")
+
+            if checked_count > 0:
+                _notify_user(f"[Naver] Marking {checked_count} emails as unread...", "info")
+                try:
+                    unread_button = wait.until(EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//button[contains(@class, 'button_task') and contains(., '안읽음')]"
+                    )))
+                    unread_button.click()
+                    time.sleep(random.uniform(0.5, 1.0))
+                    _notify_user("[Naver] ✅ Marked emails as unread", "success")
+                except Exception as e:
+                    _notify_user(f"[Naver] ⚠️ Could not mark as unread: {type(e).__name__}", "warning")
+
+        # print for debugging
+        import pprint
+        print(f"processed_mail_ids: {processed_mail_ids}")
+        print("email_list:")
+        pprint.pprint(email_list)
 
         _notify_user(f"[Naver] ✅ Fetched {len(email_list)} emails", "success")
         
@@ -1467,7 +1593,7 @@ def get_kakao_token_via_webdriver(rest_api_key, redirect_uri, kakao_id=None, kak
         
         # Consent (if needed)
         try:
-            consent_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")), timeout=5)
+            consent_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
             consent_btn.click()
             _notify_user("[Kakao OAuth] Consent button clicked...", "info")
         except Exception:
@@ -1527,3 +1653,5 @@ if __name__ == "__main__":
     naver_id = st.secrets.get("NAVER_ID")
     naver_passkey = st.secrets.get("NAVER_PW")
     fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
+
+
