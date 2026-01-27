@@ -3,10 +3,11 @@ import streamlit as st
 import sys
 import os
 import time
-from utils import (get_all_senders_clean, 
-                   send_kakao_notification,
-                   send_naver_report,
-                   get_students_from_aca2000,)
+from utils import (get_students_from_aca2000,
+                   get_class_list_from_aca2000,
+                   get_students_for_classes,
+                   fetch_naver_email,
+                   find_missing_students,)
 # Selenium imports - uncomment when get_driver() is used
 # from selenium import webdriver
 # from selenium.webdriver.chrome.service import Service
@@ -74,26 +75,26 @@ kakao_pw = st.text_input("Kakao Login Password", value=kakao_pw_value, type="pas
 
 st.divider()
 
-# Step 1: Fetch classes from ACA2000 first
-if st.button('🔍 Fetch Classes from ACA2000'):
+# Step 1: Fetch all classes and students from ACA2000 (one visit, efficient)
+if st.button('🔍 Fetch Classes & Students from ACA2000'):
     with st.spinner("Connecting to ACA2000..."):
         try:
             all_students = get_students_from_aca2000()
             if all_students:
                 st.session_state.all_students = all_students
-                st.success(f"✅ Found {len(all_students)} classes!")
+                st.success(f"✅ Found {len(all_students)} classes with {sum(len(s) for s in all_students.values())} total students!")
             else:
                 st.error("❌ No classes found or connection failed.")
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
-# Step 2: Show class selection if classes are fetched
+# Step 2: Show class selection if data is fetched
 if 'all_students' in st.session_state and st.session_state.all_students:
     all_students = st.session_state.all_students
     class_info = {class_name: len(students) for class_name, students in all_students.items()}
     
     with st.form("class_selection_form"):
-        st.write(f"**Select Classes to Include ({len(class_info)} available):**")
+        st.write(f"**Select Classes to Include in Report ({len(class_info)} available):**")
         
         # Display checkboxes in 3 columns
         cols = st.columns(3)
@@ -103,7 +104,7 @@ if 'all_students' in st.session_state and st.session_state.all_students:
             col_idx = idx % 3
             class_selections[class_name] = cols[col_idx].checkbox(
                 f"{class_name} ({count})",
-                value=True,  # All checked by default
+                value=False,  # All unchecked by default
                 key=f"class_{class_name}"
             )
         
@@ -116,102 +117,68 @@ if 'all_students' in st.session_state and st.session_state.all_students:
             else:
                 st.warning("⚠️ Please select at least one class.")
 
-# Step 3: Run automation if classes are selected
+# Step 3: Run automation with selected classes (data already fetched, just filter)
 if st.session_state.get('run_automation', False):
     selected_classes = st.session_state.selected_classes
     all_students = st.session_state.all_students
     
-    # Filter student list based on selection
-    student_list = {name: all_students[name] for name in selected_classes}
+    # Filter to only selected classes (fast, local operation)
+    student_list = {name: all_students[name] for name in selected_classes if name in all_students}
     # Validation
     if not user_email_id or not user_app_pw:
         st.warning("Please enter both your Naver ID and App Password.")
         st.stop()
-    if not kakao_id or not kakao_pw:
-        st.warning("Please enter both your Kakao ID and Password.")
-        st.stop()
-    if not kakao_api_key or not kakao_registered_redirect_url:
-        st.warning("Please enter both your Kakao API Key and Redirect URL.")
-        st.stop()
-    
     # Initialize variables
-    success = False
     senders = set()
-    kakao_success = False
 
     try:
         with st.status("Agent is running...", expanded=True) as status:
             # Step 1: Read Emails
             st.write("Reading Naver emails...")
-            senders = get_all_senders_clean(user_email_id, user_app_pw)
-            st.write(f"✅ Found {len(senders)} recent senders.")
-            
-            # Step 2: Show selected classes
-            st.write(f"✅ Processing {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students")
-            
-            
-            # Step 3: Send Report Email
-            # Build report content with both email senders and ACA2000 students
-            report_content = "The Academy Agent has finished syncing.\n\n"
-            
-            # Add email senders section
-            report_content += f"📧 Email Senders ({len(senders)}):\n"
-            report_content += "\n".join(f"  - {sender}" for sender in sorted(senders))
-            report_content += "\n\n"
-            
-            # Add ACA2000 students section
-            report_content += "🎓 ACA2000 Students (Latest Saturday):\n"
-            for class_name, students in student_list.items():
-                report_content += f"\n{class_name} ({len(students)} students):\n"
-                report_content += "\n".join(f"  - {student}" for student in students)
-                report_content += "\n"
-            
-            success = send_naver_report(user_email_id, user_app_pw, user_email_id, report_content)
-            if success:
-                st.write("✅ Email delivered successfully.")
-            else:
-                st.write("⚠️ Email notification failed (Check settings).")
+            emails = fetch_naver_email(naver_id=user_email_id, naver_passkey=user_app_pw)
+            senders = {e['sender'] for e in emails}
+            st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
 
-            # Step 4: Send KakaoTalk Message if Configured
-            if kakao_api_key and kakao_registered_redirect_url:
-                st.write("Sending report to KakaoTalk...")
-                kakao_success = send_kakao_notification(
-                    kakao_api_key, 
-                    kakao_registered_redirect_url, 
-                    report_content, 
-                    kakao_id, 
-                    kakao_pw
-                )
-                if kakao_success:
-                    st.write("✅ Kakao message sent!")
-                else:
-                    st.write("⚠️ Kakao message failed (Check API key and redirect URL).")
-            else:
-                st.write("⏭️ Skipping Kakao notification (API key or redirect URL not provided).")
-                   
+            # Step 2: Use pre-fetched student data for selected classes
+            st.write(f"✅ Using {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students")
+
+            # Compare students against emails
+            st.write("Comparing students against emails...")
+            missing = find_missing_students(student_list, emails)
+            total_missing = sum(len(v) for v in missing.values())
+            st.write(f"✅ Found {total_missing} students who didn't send an email.")
+
             status.update(label="All Tasks Complete!", state="complete", expanded=False)
-            
+
     except Exception as e:
         st.error(f"❌ An error occurred during automation: {e}")
         st.exception(e)
-        # Reset state on error
         st.session_state.run_automation = False
         st.stop()
-        
-    # This remains outside to give a clear final visual confirmation
-    if success:
-        st.success("Automation finished and report sent!")
-        st.balloons()  # Optional fun effect for your user
+
+    st.success("Automation finished!")
+    st.balloons()
+
+    # Display results
+    st.subheader("Results")
+
+    if missing:
+        st.markdown(f"**Missing Homework ({total_missing} students):**")
+        for class_name, students in missing.items():
+            st.markdown(f"_{class_name}_:")
+            for s in students:
+                st.markdown(f"- {s}")
     else:
-        st.warning("Automation finished, but we couldn't send the email.")
-    
+        st.markdown("All students submitted homework!")
+
+    with st.expander("Email Details"):
+        for e in emails:
+            st.markdown(f"**{e['subject']}** — {e['sender']}")
+            if e['attachments']:
+                st.caption(f"Attachments: {', '.join(e['attachments'])}")
+
     # Reset state after completion
     st.session_state.run_automation = False
     if st.button("Run Again"):
         st.session_state.clear()
         st.rerun()
-        
-    # Table Results
-    if senders:
-        st.subheader("Results")
-        st.dataframe([{"Sender": s, "Status": "Processed"} for s in senders], width='stretch')
