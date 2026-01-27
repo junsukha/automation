@@ -1018,6 +1018,56 @@ def get_headless_stealth_driver():
 
     return driver
 
+def find_missing_students(student_dict, emails):
+    """
+    Compare ACA2000 student names against fetched email data.
+
+    Args:
+        student_dict: {class_name: [student_entry, ...]} from get_students_from_aca2000()
+        emails: list of dicts with keys: sender, subject, content, attachments
+
+    Returns:
+        dict: {class_name: {'matched': [(student_entry, email_subject), ...],
+                            'missing': [student_entry, ...]}}
+    """
+    import re
+
+    STOP_WORDS = {'대기', '휴강', '신규', '월', '화', '수', '목', '금', '토', '일', '월금', '화목'}
+
+    def extract_korean_name(entry):
+        matches = re.findall(r'[가-힣]+', entry)
+        names = [m for m in matches if 2 <= len(m) <= 3 and m not in STOP_WORDS]
+        return names[0] if names else None
+
+    # Build searchable text per email
+    email_texts = []
+    for e in emails:
+        combined = f"{e['subject']} {e['content']} {' '.join(e['attachments'])}"
+        email_texts.append((combined, e['subject']))
+
+    results = {}
+    for class_name, students in student_dict.items():
+        matched = []
+        missing = []
+        for student_entry in students:
+            name = extract_korean_name(student_entry)
+            if not name:
+                missing.append(student_entry)
+                continue
+            found_subject = None
+            for text, subject in email_texts:
+                if name in text:
+                    found_subject = subject
+                    break
+            if found_subject:
+                matched.append((student_entry, found_subject))
+            else:
+                missing.append(student_entry)
+        results[class_name] = {'matched': matched, 'missing': missing}
+
+    return results
+
+
 def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passkey=None):
     """
     Fetches Naver email using Selenium WebDriver.
@@ -1183,7 +1233,7 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Keep track of processed email IDs to mark as unread later
         processed_mail_ids = []
 
-        # TODO: fetch only emails received within last 7 days
+        # TODO: ask users start and end dates to retrieve emails within that range. Maybe ask before calling this function? from app.py
         for mail_item in mail_items[:5]:  # Get last 20 emails
             try:
                 # Get the mail ID from the class attribute (e.g., "mail-25317")
