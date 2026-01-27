@@ -132,8 +132,8 @@ if 'all_students' in st.session_state and st.session_state.all_students:
                 st.write(f"✅ Using {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students")
 
                 st.write("Comparing students against emails...")
-                missing = find_missing_students(student_list, emails)
-                total_missing = sum(len(v) for v in missing.values())
+                results = find_missing_students(student_list, emails)
+                total_missing = sum(len(r['missing']) for r in results.values())
                 st.write(f"✅ Found {total_missing} students who didn't send an email.")
 
                 status.update(label="All Tasks Complete!", state="complete", expanded=False)
@@ -146,20 +146,36 @@ if 'all_students' in st.session_state and st.session_state.all_students:
         st.success("Automation finished!")
         st.balloons()
 
-        # Display results
+        # Block 1: Comparison results per class
         st.subheader("Results")
+        for class_name, data in results.items():
+            st.markdown(f"**{class_name}**")
+            if data['matched']:
+                for student, subject in data['matched']:
+                    st.markdown(f"- ✅ {student} → _{subject}_")
+            if data['missing']:
+                for s in data['missing']:
+                    st.markdown(f"- ❌ {s}")
+            # example output:
+            # M5 월금
+            # - ✅ 김빛나 → FW: 첨부파일테스트 (2)
+            # - ✅ 이현수 → 과제 제출합니다
+            # - ❌ 박서준
 
-        if missing:
-            st.markdown(f"**Missing Homework ({total_missing} students):**")
-            for class_name, students in missing.items():
-                st.markdown(f"_{class_name}_:")
-                for s in students:
-                    st.markdown(f"- {s}")
+        # Block 2: Missing students summary
+        if total_missing > 0:
+            st.divider()
+            st.subheader(f"Missing Homework ({total_missing} students)")
+            for class_name, data in results.items():
+                if data['missing']:
+                    st.markdown(f"**{class_name}:**")
+                    for s in data['missing']:
+                        st.markdown(f"- {s}")
+            # example output:
+            # Missing Homework (1 students)
+            # M5 월금:
+            # - 박서준
+            
         else:
+            st.divider()
             st.markdown("All students submitted homework!")
-
-        with st.expander("Email Details"):
-            for e in emails:
-                st.markdown(f"**{e['subject']}** — {e['sender']}")
-                if e['attachments']:
-                    st.caption(f"Attachments: {', '.join(e['attachments'])}")
