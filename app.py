@@ -109,76 +109,57 @@ if 'all_students' in st.session_state and st.session_state.all_students:
             )
         
         # Submit button
-        if st.form_submit_button("🚀 Run Automation with Selected Classes"):
-            selected_classes = [name for name, selected in class_selections.items() if selected]
-            if selected_classes:
-                st.session_state.selected_classes = selected_classes
-                st.session_state.run_automation = True
-            else:
-                st.warning("⚠️ Please select at least one class.")
+        submitted = st.form_submit_button("🚀 Run Automation with Selected Classes")
 
-# Step 3: Run automation with selected classes (data already fetched, just filter)
-if st.session_state.get('run_automation', False):
-    selected_classes = st.session_state.selected_classes
-    all_students = st.session_state.all_students
-    
-    # Filter to only selected classes (fast, local operation)
-    student_list = {name: all_students[name] for name in selected_classes if name in all_students}
-    # Validation
-    if not user_email_id or not user_app_pw:
-        st.warning("Please enter both your Naver ID and App Password.")
-        st.stop()
-    # Initialize variables
-    senders = set()
+    if submitted:
+        selected_classes = [name for name, selected in class_selections.items() if selected]
+        if not selected_classes:
+            st.warning("⚠️ Please select at least one class.")
+            st.stop()
+        if not user_email_id or not user_app_pw:
+            st.warning("Please enter both your Naver ID and App Password.")
+            st.stop()
 
-    try:
-        with st.status("Agent is running...", expanded=True) as status:
-            # Step 1: Read Emails
-            st.write("Reading Naver emails...")
-            emails = fetch_naver_email(naver_id=user_email_id, naver_passkey=user_app_pw)
-            senders = {e['sender'] for e in emails}
-            st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
+        student_list = {name: all_students[name] for name in selected_classes if name in all_students}
 
-            # Step 2: Use pre-fetched student data for selected classes
-            st.write(f"✅ Using {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students")
+        try:
+            with st.status("Agent is running...", expanded=True) as status:
+                st.write("Reading Naver emails...")
+                emails = fetch_naver_email(naver_id=user_email_id, naver_passkey=user_app_pw)
+                senders = {e['sender'] for e in emails}
+                st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
 
-            # Compare students against emails
-            st.write("Comparing students against emails...")
-            missing = find_missing_students(student_list, emails)
-            total_missing = sum(len(v) for v in missing.values())
-            st.write(f"✅ Found {total_missing} students who didn't send an email.")
+                st.write(f"✅ Using {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students")
 
-            status.update(label="All Tasks Complete!", state="complete", expanded=False)
+                st.write("Comparing students against emails...")
+                missing = find_missing_students(student_list, emails)
+                total_missing = sum(len(v) for v in missing.values())
+                st.write(f"✅ Found {total_missing} students who didn't send an email.")
 
-    except Exception as e:
-        st.error(f"❌ An error occurred during automation: {e}")
-        st.exception(e)
-        st.session_state.run_automation = False
-        st.stop()
+                status.update(label="All Tasks Complete!", state="complete", expanded=False)
 
-    st.success("Automation finished!")
-    st.balloons()
+        except Exception as e:
+            st.error(f"❌ An error occurred during automation: {e}")
+            st.exception(e)
+            st.stop()
 
-    # Display results
-    st.subheader("Results")
+        st.success("Automation finished!")
+        st.balloons()
 
-    if missing:
-        st.markdown(f"**Missing Homework ({total_missing} students):**")
-        for class_name, students in missing.items():
-            st.markdown(f"_{class_name}_:")
-            for s in students:
-                st.markdown(f"- {s}")
-    else:
-        st.markdown("All students submitted homework!")
+        # Display results
+        st.subheader("Results")
 
-    with st.expander("Email Details"):
-        for e in emails:
-            st.markdown(f"**{e['subject']}** — {e['sender']}")
-            if e['attachments']:
-                st.caption(f"Attachments: {', '.join(e['attachments'])}")
+        if missing:
+            st.markdown(f"**Missing Homework ({total_missing} students):**")
+            for class_name, students in missing.items():
+                st.markdown(f"_{class_name}_:")
+                for s in students:
+                    st.markdown(f"- {s}")
+        else:
+            st.markdown("All students submitted homework!")
 
-    # Reset state after completion
-    st.session_state.run_automation = False
-    if st.button("Run Again"):
-        st.session_state.clear()
-        st.rerun()
+        with st.expander("Email Details"):
+            for e in emails:
+                st.markdown(f"**{e['subject']}** — {e['sender']}")
+                if e['attachments']:
+                    st.caption(f"Attachments: {', '.join(e['attachments'])}")
