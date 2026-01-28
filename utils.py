@@ -469,7 +469,8 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
         service=Service(ChromeDriverManager().install()),
         options=options
     )
-    _make_driver_read_only(driver)
+    
+    # _make_driver_read_only(driver)
 
     wait = WebDriverWait(driver, 20)
 
@@ -491,6 +492,7 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
                 "//button[contains(text(), '로그인')] | //input[@value='로그인'] | //button[@type='submit'] | //input[@type='submit']"
             )))
             login_btn.click()
+            _notify_user("[ACA2000] Login button clicked", "info")
         except Exception:
             try:
                 user_pw_input.submit()
@@ -500,11 +502,14 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
 
         # Check for login errors
         current_url = driver.current_url
+        _notify_user(f"[ACA2000] Current URL after login attempt: {current_url}", "info")
         if "/Account/Login" in current_url or "ReturnUrl" in current_url:
+            _notify_user("[ACA2000] ⚠️ Still on login page - checking for errors...", "warning")
             try:
-                login_form = driver.find_element(By.CSS_SELECTOR, "form")
-                login_form.submit()
-                time.sleep(3)
+                error_elements = driver.find_elements(By.CSS_SELECTOR, ".error, .alert, .warning, [class*='error'], [class*='alert']")
+                if error_elements:
+                    error_text = " ".join([elem.text for elem in error_elements if elem.text])
+                    _notify_user(f"[ACA2000] ⚠️ Login error detected: {error_text}", "error")
             except Exception:
                 pass
 
@@ -1958,10 +1963,10 @@ if __name__ == "__main__":
     
     # test aca2000 attendance system
     # use stealit.secrets to get the credentials
-    # cust_num = st.secrets.get("ACA2000_CUST_NUM")
-    # user_id = st.secrets.get("ACA2000_USER_ID")
-    # user_pw = st.secrets.get("ACA2000_USER_PW")
-    # get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
+    cust_num = st.secrets.get("ACA2000_CUST_NUM")
+    user_id = st.secrets.get("ACA2000_USER_ID")
+    user_pw = st.secrets.get("ACA2000_USER_PW")
+    get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
     
     
     # test get_email_from_gmail
@@ -1975,8 +1980,8 @@ if __name__ == "__main__":
     
     # test fetch_naver_email
     # use stealit.secrets to get the credentials
-    naver_id = st.secrets.get("NAVER_ID")
-    naver_passkey = st.secrets.get("NAVER_PW")
-    fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
+    # naver_id = st.secrets.get("NAVER_ID")
+    # naver_passkey = st.secrets.get("NAVER_PW")
+    # fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
 
 
