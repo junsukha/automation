@@ -4,7 +4,6 @@ import sys
 import os
 import time
 from utils import (
-    get_students_from_aca2000,
     get_class_list_from_aca2000,
     get_students_for_classes,
     fetch_naver_email,
@@ -102,49 +101,53 @@ kakao_pw = st.text_input("Kakao Login Password", value=kakao_pw_value, type="pas
 
 st.divider()
 
-# Step 1: Fetch all classes and students from ACA2000 (one visit, efficient)
-if st.button("🔍 Fetch Classes & Students from ACA2000"):
+# Step 1: Fetch class list from ACA2000 (login + scrape class names, keep driver alive)
+if st.button("🔍 Fetch Classes from ACA2000"):
+    # Clean up any stale driver from previous run
+    if "aca_driver" in st.session_state and st.session_state.aca_driver:
+        try:
+            st.session_state.aca_driver.quit()
+        except Exception:
+            pass
+        st.session_state.aca_driver = None
+
     with st.spinner("Connecting to ACA2000..."):
         try:
-            all_students = get_students_from_aca2000()
-            if all_students:
-                st.session_state.all_students = all_students
-                st.success(
-                    f"✅ Found {len(all_students)} classes with {sum(len(s) for s in all_students.values())} total students!"
-                )
+            class_info, driver = get_class_list_from_aca2000()
+            if class_info and driver:
+                st.session_state.class_info = class_info
+                st.session_state.aca_driver = driver
+                st.success(f"✅ Found {len(class_info)} classes!")
             else:
                 st.error("❌ No classes found or connection failed.")
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
-# Step 2: Select classes, fetch emails, and compare
-if "all_students" in st.session_state and st.session_state.all_students:
-    all_students = st.session_state.all_students
-    class_info = {
-        class_name: len(students) for class_name, students in all_students.items()
-    }
+# Step 2: Select classes, fetch students + emails, and compare
+if "class_info" in st.session_state and st.session_state.class_info:
+    class_info = st.session_state.class_info
 
     with st.form("class_selection_form"):
         st.write(
-            f"**Select Classes to Include in Report ({len(class_info)} available):**"
+            f"**Select Classes to Include ({len(class_info)} available):**"
         )
 
         # Display checkboxes in 3 columns
         cols = st.columns(3)
         class_selections = {}
 
-        for idx, (class_name, count) in enumerate(class_info.items()):
+        for idx, class_name in enumerate(class_info.keys()):
             col_idx = idx % 3
             class_selections[class_name] = cols[col_idx].checkbox(
-                f"{class_name} ({count})",
-                value=False,  # All unchecked by default
+                class_name,
+                value=False,
                 key=f"class_{class_name}",
             )
 
         # Submit button
         submitted = st.form_submit_button("🚀 Run Automation with Selected Classes")
 
-    # On submit: fetch emails, compare with students, display results
+    # On submit: fetch students for selected classes, fetch emails, compare, display
     if submitted:
         selected_classes = [
             name for name, selected in class_selections.items() if selected
@@ -156,15 +159,26 @@ if "all_students" in st.session_state and st.session_state.all_students:
             st.warning("Please enter both your Naver ID and App Password.")
             st.stop()
 
-        # Filter to only selected classes
-        student_list = {
-            name: all_students[name]
+        # Build selected class_ids dict
+        selected_class_ids = {
+            name: class_info[name]
             for name in selected_classes
-            if name in all_students
         }
 
         try:
             with st.status("Agent is running...", expanded=True) as status:
+                # Fetch students for selected classes using existing driver
+                st.write("Fetching students for selected classes...")
+                driver = st.session_state.pop("aca_driver", None)
+                if not driver:
+                    st.error("❌ ACA2000 session expired. Please fetch classes again.")
+                    st.stop()
+                student_list = get_students_for_classes(driver, selected_class_ids)
+                # Driver is now quit by get_students_for_classes
+                st.write(
+                    f"✅ Found {sum(len(s) for s in student_list.values())} students in {len(student_list)} classes"
+                )
+
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
                 emails = fetch_naver_email(
@@ -172,10 +186,6 @@ if "all_students" in st.session_state and st.session_state.all_students:
                 )
                 senders = {e["sender"] for e in emails}
                 st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
-
-                st.write(
-                    f"✅ Using {len(student_list)} selected classes with {sum(len(s) for s in student_list.values())} total students"
-                )
 
                 # Match student names (Korean, 2-3 chars) against email text
                 st.write("Comparing students against emails...")
@@ -190,6 +200,13 @@ if "all_students" in st.session_state and st.session_state.all_students:
         except Exception as e:
             st.error(f"❌ An error occurred during automation: {e}")
             st.exception(e)
+            # Clean up driver if still alive
+            if "aca_driver" in st.session_state and st.session_state.aca_driver:
+                try:
+                    st.session_state.aca_driver.quit()
+                except Exception:
+                    pass
+                st.session_state.pop("aca_driver", None)
             st.stop()
 
         st.success("Automation finished!")
