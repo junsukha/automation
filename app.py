@@ -28,7 +28,7 @@ st.set_page_config(page_title="Academy Automation Agent", page_icon="🤖")
 
 # Main UI
 st.title("🤖 Academy Automation Agent")
-st.write("Sync Naver Emails with ACA2000 and get notifications via KakaoTalk.")
+st.write("Sync Naver Emails with ACA2000 Student Lists")
 
 
 # Helper function to safely get value from st.secrets
@@ -39,12 +39,9 @@ def get_secret(key, default=""):
     except (AttributeError, KeyError):
         return default
 
-
-# Section 1: Naver
-st.header("📧 1. Naver Configuration")
 # Only pre-fill when --test flag is used
 naver_id_value = get_secret("NAVER_ID") if USE_TEST_MODE else ""
-naver_pw_value = get_secret("NAVER_APP_PW") if USE_TEST_MODE else ""
+naver_pw_value = get_secret("NAVER_PW") if USE_TEST_MODE else ""
 
 if USE_TEST_MODE and (naver_id_value or naver_pw_value):
     st.caption(
@@ -56,50 +53,50 @@ with col1:
         "Naver ID", value=naver_id_value, placeholder="without @naver.com"
     )
 with col2:
-    user_app_pw = st.text_input(
-        "Naver App Password",
+    user_pw = st.text_input(
+        "Naver Password",
         value=naver_pw_value,
         type="password",
-        help="Use a 16-digit App Password, not your login PW.",
+        help="Use NAVER login PW.",
     )
 
-# Quick IMAP connectivity check
-if st.button("🔍 Test Naver Login"):
-    try:
-        from imap_tools import MailBox
+# # Quick IMAP connectivity check
+# if st.button("🔍 Test Naver Login"):
+#     try:
+#         from imap_tools import MailBox
 
-        with MailBox("imap.naver.com").login(user_email_id, user_app_pw):
-            st.success("✅ Naver IMAP Ready!")
-    except Exception as e:
-        st.error(f"❌ Login Failed. Check ID/App PW. {e}")
+#         with MailBox("imap.naver.com").login(user_email_id, user_app_pw):
+#             st.success("✅ Naver IMAP Ready!")
+#     except Exception as e:
+#         st.error(f"❌ Login Failed. Check ID/App PW. {e}")
 
-st.divider()
+# st.divider()
 
-# Section 2: KakaoTalk (Right below Naver)
-# Ask for Kakao REST API Key and Redirect URL from Kakao Developers
-st.header("💬 2. KakaoTalk Notification (Optional)")
-# Only pre-fill when --test flag is used
-kakao_api_key_value = get_secret("KAKAO_REST_API_KEY") if USE_TEST_MODE else ""
-kakao_redirect_value = get_secret("KAKAO_REDIRECT_URL") if USE_TEST_MODE else ""
-kakao_id_value = get_secret("KAKAO_ID") if USE_TEST_MODE else ""
-kakao_pw_value = get_secret("KAKAO_PW") if USE_TEST_MODE else ""
+# # Section 2: KakaoTalk (Right below Naver)
+# # Ask for Kakao REST API Key and Redirect URL from Kakao Developers
+# st.header("💬 2. KakaoTalk Notification (Optional)")
+# # Only pre-fill when --test flag is used
+# kakao_api_key_value = get_secret("KAKAO_REST_API_KEY") if USE_TEST_MODE else ""
+# kakao_redirect_value = get_secret("KAKAO_REDIRECT_URL") if USE_TEST_MODE else ""
+# kakao_id_value = get_secret("KAKAO_ID") if USE_TEST_MODE else ""
+# kakao_pw_value = get_secret("KAKAO_PW") if USE_TEST_MODE else ""
 
-if USE_TEST_MODE and (kakao_api_key_value or kakao_id_value):
-    st.caption(
-        "💡 Test mode: Credentials pre-filled from secrets. You can edit them if needed."
-    )
-kakao_api_key = st.text_input(
-    "Kakao REST API Key", value=kakao_api_key_value, type="password"
-)
-kakao_registered_redirect_url = st.text_input(
-    "Kakao Redirect URL",
-    value=kakao_redirect_value,
-    help="The Redirect URL you set in Kakao Developers (e.g., https://localhost:5000/)",
-)
-kakao_id = st.text_input("Kakao Login ID (Email or Phone)", value=kakao_id_value)
-kakao_pw = st.text_input("Kakao Login Password", value=kakao_pw_value, type="password")
+# if USE_TEST_MODE and (kakao_api_key_value or kakao_id_value):
+#     st.caption(
+#         "💡 Test mode: Credentials pre-filled from secrets. You can edit them if needed."
+#     )
+# kakao_api_key = st.text_input(
+#     "Kakao REST API Key", value=kakao_api_key_value, type="password"
+# )
+# kakao_registered_redirect_url = st.text_input(
+#     "Kakao Redirect URL",
+#     value=kakao_redirect_value,
+#     help="The Redirect URL you set in Kakao Developers (e.g., https://localhost:5000/)",
+# )
+# kakao_id = st.text_input("Kakao Login ID (Email or Phone)", value=kakao_id_value)
+# kakao_pw = st.text_input("Kakao Login Password", value=kakao_pw_value, type="password")
 
-st.divider()
+# st.divider()
 
 # Step 1: Fetch class list from ACA2000 (login + scrape class names, keep driver alive)
 if st.button("🔍 Fetch Classes from ACA2000"):
@@ -111,17 +108,17 @@ if st.button("🔍 Fetch Classes from ACA2000"):
             pass
         st.session_state.aca_driver = None
 
-    with st.spinner("Connecting to ACA2000..."):
+    with st.status("Connecting to ACA2000...", expanded=True) as status:
         try:
             class_info, driver = get_class_list_from_aca2000()
             if class_info and driver:
                 st.session_state.class_info = class_info
                 st.session_state.aca_driver = driver
-                st.success(f"✅ Found {len(class_info)} classes!")
+                status.update(label=f"✅ Found {len(class_info)} classes!", state="complete", expanded=False)
             else:
-                st.error("❌ No classes found or connection failed.")
+                status.update(label="❌ No classes found or connection failed.", state="error", expanded=False)
         except Exception as e:
-            st.error(f"❌ Error: {e}")
+            status.update(label=f"❌ Error: {e}", state="error", expanded=False)
 
 # Step 2: Select classes, fetch students + emails, and compare
 if "class_info" in st.session_state and st.session_state.class_info:
@@ -145,7 +142,7 @@ if "class_info" in st.session_state and st.session_state.class_info:
             )
 
         # Submit button
-        submitted = st.form_submit_button("🚀 Run Automation with Selected Classes")
+        submitted = st.form_submit_button("🚀 Find lazy students from Selected Classes")
 
     # On submit: fetch students for selected classes, fetch emails, compare, display
     if submitted:
@@ -155,8 +152,8 @@ if "class_info" in st.session_state and st.session_state.class_info:
         if not selected_classes:
             st.warning("⚠️ Please select at least one class.")
             st.stop()
-        if not user_email_id or not user_app_pw:
-            st.warning("Please enter both your Naver ID and App Password.")
+        if not user_email_id or not user_pw:
+            st.warning("Please enter both your Naver ID and Password.")
             st.stop()
 
         # Build selected class_ids dict
@@ -182,7 +179,7 @@ if "class_info" in st.session_state and st.session_state.class_info:
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
                 emails = fetch_naver_email(
-                    naver_id=user_email_id, naver_passkey=user_app_pw
+                    naver_id=user_email_id, naver_passkey=user_pw
                 )
                 senders = {e["sender"] for e in emails}
                 st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
