@@ -1494,6 +1494,20 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
             "ol.mail_list, #mail_list_wrap, li.mail_item"
         )))
 
+        # Ensure we're on '전체메일' (some accounts default to '받은메일함')
+        try:
+            all_mail_link = driver.find_element(
+                By.CSS_SELECTOR, "a.mailbox_label[title='전체메일']"
+            )
+            all_mail_link.click()
+            time.sleep(random.uniform(1.5, 2.5))
+            wait.until(EC.presence_of_element_located((
+                By.CSS_SELECTOR,
+                "ol.mail_list, #mail_list_wrap, li.mail_item"
+            )))
+        except Exception:
+            _notify_user("[Naver] ⚠️ Could not navigate to '전체메일', using current view", "warning")
+
         # Add another small random delay before extracting
         time.sleep(random.uniform(0.5, 1.5))
 
@@ -1961,10 +1975,10 @@ if __name__ == "__main__":
     
     # test aca2000 attendance system
     # use stealit.secrets to get the credentials
-    cust_num = st.secrets.get("ACA2000_CUST_NUM")
-    user_id = st.secrets.get("ACA2000_USER_ID")
-    user_pw = st.secrets.get("ACA2000_USER_PW")
-    get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
+    # cust_num = st.secrets.get("ACA2000_CUST_NUM")
+    # user_id = st.secrets.get("ACA2000_USER_ID")
+    # user_pw = st.secrets.get("ACA2000_USER_PW")
+    # get_students_from_aca2000(headless=False, cust_num=cust_num, user_id=user_id, user_pw=user_pw)
     
     
     # test get_email_from_gmail
@@ -1978,8 +1992,8 @@ if __name__ == "__main__":
     
     # test fetch_naver_email
     # use stealit.secrets to get the credentials
-    # naver_id = st.secrets.get("NAVER_ID")
-    # naver_passkey = st.secrets.get("NAVER_PW")
-    # fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
+    naver_id = st.secrets.get("NAVER_ID")
+    naver_passkey = st.secrets.get("NAVER_PW")
+    fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
 
 
