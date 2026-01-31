@@ -560,7 +560,7 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
         target_year = latest_saturday.year
         target_month = latest_saturday.month
         target_day = latest_saturday.day
-        _notify_user(f"[ACA2000] Target date: {target_date}", "info")
+        _notify_user(f"[ACA2000] Target date (the latest Saturday): {target_date}", "info")
 
         try:
             # Try calendar popup
@@ -605,17 +605,17 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
                             break
                     except Exception:
                         break
-                # Click target day
+                # Click target day (exclude old/new month days)
                 try:
                     date_cell = wait.until(EC.element_to_be_clickable((
                         By.XPATH,
-                        f"//td[contains(@class, 'day') and not(contains(@class, 'disabled'))]//div[text()='{target_day}']"
+                        f"//td[contains(@class, 'day') and not(contains(@class, 'disabled')) and not(contains(@class, 'old')) and not(contains(@class, 'new'))]//div[text()='{target_day}']"
                     )))
                     date_cell.click()
                     time.sleep(2)
                     _notify_user(f"[ACA2000] ✅ Selected date: {target_date}", "success")
-                except Exception:
-                    pass
+                except Exception as e:
+                    _notify_user(f"[ACA2000] ⚠️ Could not select date: {type(e).__name__}", "warning")
             else:
                 # Arrow button navigation
                 for _ in range(30):
@@ -654,10 +654,9 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
                             class_id = match.group(1)
                             if class_name and class_name not in class_info:
                                 class_info[class_name] = class_id
-                                _notify_user(f"[ACA2000] Found class: {class_name} (ID: {class_id})", "info")
                 except Exception:
                     continue
-            _notify_user(f"[ACA2000] ✅ Found {len(class_info)} classes", "success")
+            _notify_user(f"[ACA2000] ✅ Found {len(class_info)} classes from date {target_date}", "success")
         except Exception as e:
             _notify_user(f"[ACA2000] ⚠️ Could not find class list: {e}", "warning")
 
@@ -1474,8 +1473,7 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
     )
     
     if not driver:
-        _notify_user("[Naver] ❌ Login failed, cannot fetch emails", "error")
-        return email_list
+        raise RuntimeError("Naver login failed. Check your ID and password.")
     
     wait = WebDriverWait(driver, 10)
     
@@ -1514,7 +1512,7 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         processed_mail_ids = []
 
         # TODO: ask users start and end dates to retrieve emails within that range. Maybe ask before calling this function? from app.py
-        for mail_item in mail_items[:5]:  # Get last 20 emails
+        for mail_item in mail_items[:3]:  # Get last 20 emails
             try:
                 # Get the mail ID from the class attribute (e.g., "mail-25317")
                 mail_id = None
@@ -1780,8 +1778,8 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
         login_button.click()
 
-        # Wait for login to complete (check for URL change or specific element)
-        wait.until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
+        # Wait for login to complete (longer timeout for 2FA verification)
+        WebDriverWait(driver, 60).until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
         
         _notify_user("[Naver] ✅ Login successful", "success")
         return driver  # Return the logged-in driver
