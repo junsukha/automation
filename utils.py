@@ -1363,6 +1363,7 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     import random
+    import re
 
     email_list = []
 
@@ -1514,215 +1515,248 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Step 3: Extract email subjects (only unread emails via CSS selector)
         _notify_user("[Naver] Fetching emails...", "info")
 
-        # Get unread mail items only (those without the 'read' class)
-        mail_items = driver.find_elements(By.CSS_SELECTOR, "li.mail_item:not(.read)")
-
-        if not mail_items:
-            _notify_user("[Naver] ⚠️ No unread mail items found", "warning")
-        else:
-            _notify_user(f"[Naver] Found {len(mail_items)} unread mail items", "info")
-
-        # Keep track of processed email IDs to mark as unread later
+        # Keep track of all processed email IDs across pages
         processed_mail_ids = []
 
         # Only process emails from today (for testing; change to timedelta(days=7) for production)
-        date_limit = datetime.now().date()
-        # date_limit = (datetime.now() - timedelta(days=7)).date()
-        for mail_item in mail_items:
-            try:
-                # Check email date — skip if older than 7 days
-                # Naver Mail date formats:
-                #   Today: "오후 03:32" (time only, no dot)
-                #   Past days: "01.30 16:25" (MM.DD HH:MM)
+        # date_limit = datetime.now().date()
+        date_limit = (datetime.now() - timedelta(days=2)).date()
+        date_limit_reached = False
+        page_num = 1
+
+        while True:
+            # Get unread mail items on current page
+            mail_items = driver.find_elements(By.CSS_SELECTOR, "li.mail_item:not(.read)")
+
+            if not mail_items:
+                if page_num == 1:
+                    _notify_user("[Naver] ⚠️ No unread mail items found", "warning")
+                break
+
+            _notify_user(f"[Naver] Page {page_num}: Found {len(mail_items)} unread mail items", "info")
+
+            page_mail_ids = []
+
+            for mail_item in mail_items:
                 try:
-                    date_elem = mail_item.find_element(By.CSS_SELECTOR, "span.mail_date")
-                    date_text = date_elem.text.strip()
-                    if "." not in date_text:
-                        # Time only (e.g. "오후 03:32") means today
-                        mail_date = datetime.now().date()
-                    else:
-                        # "MM.DD HH:MM" format — extract date part before the space
-                        date_part = date_text.split(" ")[0]  # "01.30"
-                        mail_date = datetime.strptime(f"{datetime.now().year}.{date_part}", "%Y.%m.%d").date()
-                    if mail_date < date_limit:
-                        _notify_user(f"[Naver] Reached emails older than 7 days ({date_text}), stopping", "info")
-                        break
-                except Exception:
-                    pass  # If date extraction fails, process the email anyway
-
-                # Get the mail ID from the class attribute (e.g., "mail-25317")
-                mail_id = None
-                class_attr = mail_item.get_attribute("class")
-                if class_attr:
-                    for cls in class_attr.split():
-                        if cls.startswith("mail-"):
-                            mail_id = cls
-                            break
-                # Extract sender (from actual Naver Mail HTML structure)
-                sender = None
-                try:
-                    # First try button.button_sender with title attribute
-                    sender_elem = mail_item.find_element(By.CSS_SELECTOR, "button.button_sender")
-                    if sender_elem:
-                        # Get sender from title attribute (contains email)
-                        sender = sender_elem.get_attribute("title")
-                        if sender:
-                            sender = sender.strip().strip('<>')  # Remove < > brackets if present
-                except Exception:
-                    # Fallback to other selectors
-                    sender_selectors = [
-                        "div.mail_sender",
-                        "button.toggle_conversation_mail",
-                        "span.mail_sender",
-                        "[class*='sender']"
-                    ]
-                    for selector in sender_selectors:
-                        try:
-                            sender_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
-                            if sender_elem and sender_elem.text.strip():
-                                sender = sender_elem.text.strip()
-                                # Clean up sender text (remove date if present)
-                                sender_lines = [line.strip() for line in sender.split('\n') if line.strip()]
-                                if sender_lines:
-                                    # Take first line that doesn't look like a date (format: 01-21)
-                                    for line in sender_lines:
-                                        if not line.replace('-', '').replace('.', '').isdigit():
-                                            sender = line
-                                            break
-                                break
-                        except Exception:
-                            continue
-
-                # Extract subject
-                subject = None
-                subject_selectors = [
-                    "div.mail_title span.text",  # Actual subject text element
-                    "a.mail_title_link span.text",  # Alternative path to subject
-                    "div.mail_title",
-                    "span.mail_title",
-                    "strong.mail_title",
-                    "div.mail_inner",
-                    "a.mail_subject",
-                    "span.subject",
-                    "[class*='subject']",
-                    "[class*='title']"
-                ]
-
-                for selector in subject_selectors:
+                    # Check email date — skip if older than date_limit
+                    # Naver Mail date formats:
+                    #   Today: "오후 03:32" (time only, no dot)
+                    #   Past days: "01.30 16:25" (MM.DD HH:MM)
                     try:
-                        subject_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
-                        if subject_elem and subject_elem.text.strip():
-                            subject = subject_elem.text.strip()
-                            # Split by newlines and take first non-empty line
-                            subject_lines = [line.strip() for line in subject.split('\n') if line.strip()]
-                            if subject_lines:
-                                subject = subject_lines[0]
+                        date_elem = mail_item.find_element(By.CSS_SELECTOR, "div.mail_date_wrap span.mail_date")
+                        date_text = (date_elem.text or date_elem.get_attribute("textContent") or "").strip()
+                        if re.search(r'\d{2}\.\d{2}', date_text):
+                            # "MM.DD HH:MM" format (e.g. "02.03 14:32")
+                            date_part = re.search(r'(\d{2}\.\d{2})', date_text).group(1)
+                            mail_date = datetime.strptime(f"{datetime.now().year}.{date_part}", "%Y.%m.%d").date()
+                            breakpoint()
+                        else:
+                            # Time only (e.g. "오후 03:32") means today
+                            mail_date = datetime.now().date()
+                            breakpoint()
+                        if mail_date < date_limit:
+                            _notify_user(f"[Naver] Reached emails older than date limit ({date_text}), stopping", "info")
+                            date_limit_reached = True
                             break
                     except Exception:
-                        continue
+                        pass  # If date extraction fails, process the email anyway
 
-                # Extract email content by clicking and reading
-                content = None
-                attachments = []
-                try:
-                    # Click on the email title link to open the email
-                    title_link = mail_item.find_element(By.CSS_SELECTOR, "a.mail_title_link")
-                    title_link.click()
+                    # Get the mail ID from the class attribute (e.g., "mail-25317")
+                    mail_id = None
+                    class_attr = mail_item.get_attribute("class")
+                    if class_attr:
+                        for cls in class_attr.split():
+                            if cls.startswith("mail-"):
+                                mail_id = cls
+                                break
+                    # Extract sender (from actual Naver Mail HTML structure)
+                    sender = None
+                    try:
+                        # First try button.button_sender with title attribute
+                        sender_elem = mail_item.find_element(By.CSS_SELECTOR, "button.button_sender")
+                        if sender_elem:
+                            # Get sender from title attribute (contains email)
+                            sender = sender_elem.get_attribute("title")
+                            if sender:
+                                sender = sender.strip().strip('<>')  # Remove < > brackets if present
+                    except Exception:
+                        # Fallback to other selectors
+                        sender_selectors = [
+                            "div.mail_sender",
+                            "button.toggle_conversation_mail",
+                            "span.mail_sender",
+                            "[class*='sender']"
+                        ]
+                        for selector in sender_selectors:
+                            try:
+                                sender_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
+                                if sender_elem and sender_elem.text.strip():
+                                    sender = sender_elem.text.strip()
+                                    # Clean up sender text (remove date if present)
+                                    sender_lines = [line.strip() for line in sender.split('\n') if line.strip()]
+                                    if sender_lines:
+                                        # Take first line that doesn't look like a date (format: 01-21)
+                                        for line in sender_lines:
+                                            if not line.replace('-', '').replace('.', '').isdigit():
+                                                sender = line
+                                                break
+                                    break
+                            except Exception:
+                                continue
 
-                    # Wait for email content to load
-                    time.sleep(random.uniform(1.0, 2.0))
-                    wait.until(EC.presence_of_element_located((
-                        By.CSS_SELECTOR,
-                        "div.mail_view_contents_inner, div.mail_view_contents"
-                    )))
-
-                    # Extract content
-                    content_selectors = [
-                        "div.mail_view_contents_inner",
-                        "div.mail_view_contents"
+                    # Extract subject
+                    subject = None
+                    subject_selectors = [
+                        "div.mail_title span.text",  # Actual subject text element
+                        "a.mail_title_link span.text",  # Alternative path to subject
+                        "div.mail_title",
+                        "span.mail_title",
+                        "strong.mail_title",
+                        "div.mail_inner",
+                        "a.mail_subject",
+                        "span.subject",
+                        "[class*='subject']",
+                        "[class*='title']"
                     ]
-                    for content_selector in content_selectors:
+
+                    for selector in subject_selectors:
                         try:
-                            content_elem = driver.find_element(By.CSS_SELECTOR, content_selector)
-                            if content_elem and content_elem.text.strip():
-                                content = content_elem.text.strip()
+                            subject_elem = mail_item.find_element(By.CSS_SELECTOR, selector)
+                            if subject_elem and subject_elem.text.strip():
+                                subject = subject_elem.text.strip()
+                                # Split by newlines and take first non-empty line
+                                subject_lines = [line.strip() for line in subject.split('\n') if line.strip()]
+                                if subject_lines:
+                                    subject = subject_lines[0]
                                 break
                         except Exception:
                             continue
 
-                    attachments = _extract_attachment_names(driver)
-
-                    # Go back to mail list
-                    driver.back()
-                    time.sleep(random.uniform(1.0, 2.0))
-
-                    # Wait for mail list to reload
-                    wait.until(EC.presence_of_element_located((
-                        By.CSS_SELECTOR,
-                        "ul.mail_list, li.mail_item"
-                    )))
-
-                except Exception as e:
-                    _notify_user(f"[Naver] ⚠️ Could not fetch content: {type(e).__name__}", "warning")
-                    # Try to go back if we're stuck
+                    # Extract email content by clicking and reading
+                    content = None
+                    attachments = []
                     try:
+                        # Click on the email title link to open the email
+                        title_link = mail_item.find_element(By.CSS_SELECTOR, "a.mail_title_link")
+                        title_link.click()
+
+                        # Wait for email content to load
+                        time.sleep(random.uniform(1.0, 2.0))
+                        wait.until(EC.presence_of_element_located((
+                            By.CSS_SELECTOR,
+                            "div.mail_view_contents_inner, div.mail_view_contents"
+                        )))
+
+                        # Extract content
+                        content_selectors = [
+                            "div.mail_view_contents_inner",
+                            "div.mail_view_contents"
+                        ]
+                        for content_selector in content_selectors:
+                            try:
+                                content_elem = driver.find_element(By.CSS_SELECTOR, content_selector)
+                                if content_elem and content_elem.text.strip():
+                                    content = content_elem.text.strip()
+                                    break
+                            except Exception:
+                                continue
+
+                        attachments = _extract_attachment_names(driver)
+
+                        # Go back to mail list
                         driver.back()
-                        time.sleep(1.0)
-                    except Exception:
-                        pass
+                        time.sleep(random.uniform(1.0, 2.0))
 
-                # Track mail_id for unread revert (email was opened regardless of content)
-                if mail_id:
-                    processed_mail_ids.append(mail_id)
+                        # Wait for mail list to reload
+                        wait.until(EC.presence_of_element_located((
+                            By.CSS_SELECTOR,
+                            "ul.mail_list, li.mail_item"
+                        )))
 
-                # Add to list if we have subject, content, or attachments
-                if subject or content or attachments:
-                    email_data = {
-                        "sender": sender if sender else "Unknown",
-                        "subject": subject if subject else "(no subject)",
-                        "content": content if content else "",
-                        "attachments": attachments
-                    }
-                    # Check for duplicates based on sender+subject combination
-                    is_duplicate = any(
-                        e["sender"] == email_data["sender"] and e["subject"] == email_data["subject"]
-                        for e in email_list
-                    )
-                    if not is_duplicate:
-                        email_list.append(email_data)
-                        _notify_user(f"[Naver]   • {sender if sender else 'Unknown'}: {subject if subject else '(no subject)'}", "info")
+                    except Exception as e:
+                        _notify_user(f"[Naver] ⚠️ Could not fetch content: {type(e).__name__}", "warning")
+                        # Try to go back if we're stuck
+                        try:
+                            driver.back()
+                            time.sleep(1.0)
+                        except Exception:
+                            pass
 
-            except Exception as e:
-                _notify_user(f"[Naver] ⚠️ Could not extract email: {type(e).__name__}", "warning")
-                continue
+                    # Track mail_id for unread revert (email was opened regardless of content)
+                    if mail_id:
+                        page_mail_ids.append(mail_id)
 
-        # Check checkboxes for all processed emails, then mark as unread
-        if processed_mail_ids:
-            _notify_user(f"[Naver] Selecting {len(processed_mail_ids)} emails...", "info")
-            checked_count = 0
-            for mail_id in processed_mail_ids:
-                try:
-                    mail_item = driver.find_element(By.CSS_SELECTOR, f"li.{mail_id}")
-                    checkbox = mail_item.find_element(By.CSS_SELECTOR, "label[role='checkbox']")
-                    if checkbox.get_attribute("aria-checked") != "true":
-                        checkbox.click()
-                        time.sleep(random.uniform(0.2, 0.4))
-                    checked_count += 1
+                    # Add to list if we have subject, content, or attachments
+                    if subject or content or attachments:
+                        email_data = {
+                            "sender": sender if sender else "Unknown",
+                            "subject": subject if subject else "(no subject)",
+                            "content": content if content else "",
+                            "attachments": attachments
+                        }
+                        # Check for duplicates based on sender+subject combination
+                        is_duplicate = any(
+                            e["sender"] == email_data["sender"] and e["subject"] == email_data["subject"]
+                            for e in email_list
+                        )
+                        if not is_duplicate:
+                            email_list.append(email_data)
+                            _notify_user(f"[Naver]   • {sender if sender else 'Unknown'}: {subject if subject else '(no subject)'}", "info")
+
                 except Exception as e:
-                    _notify_user(f"[Naver] ⚠️ Could not check {mail_id}: {type(e).__name__}", "warning")
+                    _notify_user(f"[Naver] ⚠️ Could not extract email: {type(e).__name__}", "warning")
+                    continue
 
-            if checked_count > 0:
-                _notify_user(f"[Naver] Marking {checked_count} emails as unread...", "info")
-                try:
-                    unread_button = wait.until(EC.element_to_be_clickable((
-                        By.XPATH,
-                        "//button[contains(@class, 'button_task') and normalize-space(.)='안읽음']"
-                    )))
-                    unread_button.click()
-                    time.sleep(random.uniform(0.5, 1.0))
-                    _notify_user("[Naver] ✅ Marked emails as unread", "success")
-                except Exception as e:
-                    _notify_user(f"[Naver] ⚠️ Could not mark as unread: {type(e).__name__}", "warning")
+            # Mark this page's processed emails as unread before moving on
+            if page_mail_ids:
+                _notify_user(f"[Naver] Selecting {len(page_mail_ids)} emails on page {page_num}...", "info")
+                checked_count = 0
+                for mail_id in page_mail_ids:
+                    try:
+                        mail_item = driver.find_element(By.CSS_SELECTOR, f"li.{mail_id}")
+                        checkbox = mail_item.find_element(By.CSS_SELECTOR, "label[role='checkbox']")
+                        if checkbox.get_attribute("aria-checked") != "true":
+                            checkbox.click()
+                            time.sleep(random.uniform(0.2, 0.4))
+                        checked_count += 1
+                    except Exception as e:
+                        _notify_user(f"[Naver] ⚠️ Could not check {mail_id}: {type(e).__name__}", "warning")
+
+                if checked_count > 0:
+                    _notify_user(f"[Naver] Marking {checked_count} emails as unread...", "info")
+                    try:
+                        unread_button = wait.until(EC.element_to_be_clickable((
+                            By.XPATH,
+                            "//button[contains(@class, 'button_task') and normalize-space(.)='안읽음']"
+                        )))
+                        unread_button.click()
+                        time.sleep(random.uniform(0.5, 1.0))
+                        _notify_user("[Naver] ✅ Marked emails as unread", "success")
+                    except Exception as e:
+                        _notify_user(f"[Naver] ⚠️ Could not mark as unread: {type(e).__name__}", "warning")
+
+                processed_mail_ids.extend(page_mail_ids)
+
+            # Stop if date limit was reached
+            if date_limit_reached:
+                break
+
+            # Try to go to the next page
+            try:
+                next_btn = driver.find_element(By.CSS_SELECTOR, "button.button_next#next-page")
+                if next_btn.get_attribute("disabled") is not None:
+                    _notify_user(f"[Naver] Reached last page (page {page_num})", "info")
+                    break
+                next_btn.click()
+                page_num += 1
+                time.sleep(random.uniform(1.5, 2.5))
+                wait.until(EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    "ol.mail_list, li.mail_item"
+                )))
+            except Exception:
+                break
 
         # print for debugging
         import pprint
