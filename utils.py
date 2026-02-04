@@ -1525,9 +1525,31 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         # Keep track of processed email IDs to mark as unread later
         processed_mail_ids = []
 
-        # TODO: ask users start and end dates to retrieve emails within that range. Maybe ask before calling this function? from app.py
-        for mail_item in mail_items[:3]:  # Get last 20 emails
+        # Only process emails from today (for testing; change to timedelta(days=7) for production)
+        date_limit = datetime.now().date()
+        # date_limit = (datetime.now() - timedelta(days=7)).date()
+        for mail_item in mail_items:
             try:
+                # Check email date — skip if older than 7 days
+                # Naver Mail date formats:
+                #   Today: "오후 03:32" (time only, no dot)
+                #   Past days: "01.30 16:25" (MM.DD HH:MM)
+                try:
+                    date_elem = mail_item.find_element(By.CSS_SELECTOR, "span.mail_date")
+                    date_text = date_elem.text.strip()
+                    if "." not in date_text:
+                        # Time only (e.g. "오후 03:32") means today
+                        mail_date = datetime.now().date()
+                    else:
+                        # "MM.DD HH:MM" format — extract date part before the space
+                        date_part = date_text.split(" ")[0]  # "01.30"
+                        mail_date = datetime.strptime(f"{datetime.now().year}.{date_part}", "%Y.%m.%d").date()
+                    if mail_date < date_limit:
+                        _notify_user(f"[Naver] Reached emails older than 7 days ({date_text}), stopping", "info")
+                        break
+                except Exception:
+                    pass  # If date extraction fails, process the email anyway
+
                 # Get the mail ID from the class attribute (e.g., "mail-25317")
                 mail_id = None
                 class_attr = mail_item.get_attribute("class")
