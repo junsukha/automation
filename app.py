@@ -114,6 +114,7 @@ if st.button("🔍 Fetch Classes from ACA2000"):
             if class_info and driver:
                 st.session_state.class_info = class_info
                 st.session_state.aca_driver = driver
+                driver.minimize_window()
                 status.update(label=f"✅ Found {len(class_info)} classes!", state="complete", expanded=False)
             else:
                 status.update(label="❌ No classes found or connection failed.", state="error", expanded=False)
