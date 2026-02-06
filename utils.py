@@ -1289,7 +1289,14 @@ def get_headless_stealth_driver():
     options.add_argument("--disable-features=TranslateUI")
     options.add_argument("--disable-ipc-flooding-protection")
 
-    driver = webdriver.Chrome(options=options)
+    # Use system chromedriver if available (Streamlit Cloud), otherwise default
+    import shutil
+    system_chromedriver = shutil.which("chromedriver")
+    if system_chromedriver:
+        from selenium.webdriver.chrome.service import Service
+        driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
 
     # This is the magic part that hides the headless mode from Naver
     stealth(driver,
@@ -1865,8 +1872,14 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         return driver  # Return the logged-in driver
         
     except Exception as e:
+        import traceback
         _notify_user(f"[Naver] ❌ Login failed: {e}", "error")
-        driver.save_screenshot("naver_login_error.png")
+        _notify_user(f"[Naver] Current URL: {driver.current_url}", "error")
+        _notify_user(f"[Naver] Traceback: {traceback.format_exc()}", "error")
+        try:
+            driver.save_screenshot("naver_login_error.png")
+        except Exception:
+            pass
         driver.quit()
         return None
 
