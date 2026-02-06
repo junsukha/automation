@@ -110,11 +110,14 @@ if st.button("🔍 Fetch Classes from ACA2000"):
 
     with st.status("Connecting to ACA2000...", expanded=True) as status:
         try:
-            class_info, driver = get_class_list_from_aca2000()
+            class_info, driver = get_class_list_from_aca2000(headless=True)
             if class_info and driver:
                 st.session_state.class_info = class_info
                 st.session_state.aca_driver = driver
-                driver.minimize_window()
+                try:
+                    driver.minimize_window()  # Only works in non-headless mode
+                except Exception:
+                    pass
                 status.update(label=f"✅ Found {len(class_info)} classes!", state="complete", expanded=False)
             else:
                 status.update(label="❌ No classes found or connection failed.", state="error", expanded=False)
@@ -180,7 +183,7 @@ if "class_info" in st.session_state and st.session_state.class_info:
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
                 emails = fetch_naver_email(
-                    naver_id=user_email_id, naver_passkey=user_pw
+                    headless=True, naver_id=user_email_id, naver_passkey=user_pw
                 )
                 senders = {e["sender"] for e in emails}
                 st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
