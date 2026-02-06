@@ -39,26 +39,9 @@ def get_secret(key, default=""):
     except (AttributeError, KeyError):
         return default
 
-# Only pre-fill when --test flag is used
-naver_id_value = get_secret("NAVER_ID") if USE_TEST_MODE else ""
-naver_pw_value = get_secret("NAVER_PW") if USE_TEST_MODE else ""
-
-if USE_TEST_MODE and (naver_id_value or naver_pw_value):
-    st.caption(
-        "💡 Test mode: Credentials pre-filled from secrets. You can edit them if needed."
-    )
-col1, col2 = st.columns(2)
-with col1:
-    user_email_id = st.text_input(
-        "Naver ID", value=naver_id_value, placeholder="without @naver.com"
-    )
-with col2:
-    user_pw = st.text_input(
-        "Naver Password",
-        value=naver_pw_value,
-        type="password",
-        help="Use NAVER login PW.",
-    )
+# Load Naver credentials from secrets
+user_email_id = get_secret("NAVER_ID")
+user_pw = get_secret("NAVER_PW")
 
 # # Quick IMAP connectivity check
 # if st.button("🔍 Test Naver Login"):
