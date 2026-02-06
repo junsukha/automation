@@ -465,10 +465,16 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
     options.add_argument("--disable-renderer-backgrounding")
     options.add_argument("--disable-features=TranslateUI")
     options.add_argument("--disable-ipc-flooding-protection")
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
+    # Use system chromedriver if available (Streamlit Cloud), otherwise use webdriver-manager
+    import shutil
+    system_chromedriver = shutil.which("chromedriver")
+    if system_chromedriver:
+        driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
+    else:
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=options
+        )
     
     # _make_driver_read_only(driver)
 
@@ -1813,7 +1819,14 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         options.add_argument(
             'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         )
-        driver = webdriver.Chrome(options=options)
+        # Use system chromedriver if available (Streamlit Cloud), otherwise default
+        import shutil
+        system_chromedriver = shutil.which("chromedriver")
+        if system_chromedriver:
+            from selenium.webdriver.chrome.service import Service
+            driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
+        else:
+            driver = webdriver.Chrome(options=options)
 
     wait = WebDriverWait(driver, 10)  # Wait up to 10 seconds
     
