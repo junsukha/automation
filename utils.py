@@ -1550,11 +1550,9 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
                             # "MM.DD HH:MM" format (e.g. "02.03 14:32")
                             date_part = re.search(r'(\d{2}\.\d{2})', date_text).group(1)
                             mail_date = datetime.strptime(f"{datetime.now().year}.{date_part}", "%Y.%m.%d").date()
-                            breakpoint()
                         else:
                             # Time only (e.g. "오후 03:32") means today
                             mail_date = datetime.now().date()
-                            breakpoint()
                         if mail_date < date_limit:
                             _notify_user(f"[Naver] Reached emails older than date limit ({date_text}), stopping", "info")
                             date_limit_reached = True
