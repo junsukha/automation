@@ -28,6 +28,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from selenium.webdriver.chrome.options import Options
+import random
+
 from selenium_stealth import stealth
 
 from PyKakao import Message  # Import PyKakao
@@ -76,12 +79,18 @@ def _get_secret(key, default=""):
 def _notify_user(message, message_type="error"):
     """
     Safely notify user using Streamlit if available, otherwise use print.
-    
+    Also stores logs in st.session_state for persistence across reruns.
+
     Args:
         message (str): Message to display
         message_type (str): Type of message - "error", "success", "warning", or "info"
     """
     try:
+        # Store in session_state for persistence
+        if "process_logs" not in st.session_state:
+            st.session_state.process_logs = []
+        st.session_state.process_logs.append({"message": message, "type": message_type})
+
         if message_type == "error":
             st.error(message)
         elif message_type == "success":
@@ -1802,12 +1811,7 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
     Returns:
         webdriver: Logged-in Chrome WebDriver instance, or None if login failed.
     """
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    import random
+
 
 
     _id = naver_id if naver_id else st.secrets.get("NAVER_ID")
@@ -1838,11 +1842,13 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
     wait = WebDriverWait(driver, 10)  # Wait up to 10 seconds
     
     try:
+        _notify_user("[Naver] Step 1: Opening login page...", "info")
         driver.get("https://nid.naver.com/nidlogin.login")
 
         # Random delay to appear more human-like
         time.sleep(random.uniform(1.0, 2.5))
 
+        _notify_user("[Naver] Step 2: Entering ID...", "info")
         # Wait for ID input to be present and interactable
         id_input = wait.until(EC.presence_of_element_located((By.ID, "id")))
         id_input.click()
@@ -1852,6 +1858,7 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         # Random delay between fields
         time.sleep(random.uniform(0.5, 1.2))
 
+        _notify_user("[Naver] Step 3: Entering password...", "info")
         # Wait for password input to be present and interactable
         pw_input = wait.until(EC.presence_of_element_located((By.ID, "pw")))
         driver.execute_script("arguments[0].value = arguments[1];", pw_input, _pw)
@@ -1861,13 +1868,15 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         # Random delay before clicking login
         time.sleep(random.uniform(0.5, 1.5))
 
+        _notify_user("[Naver] Step 4: Clicking login button...", "info")
         # Wait for login button to be clickable
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
         login_button.click()
 
+        _notify_user("[Naver] Step 5: Waiting for login to complete...", "info")
         # Wait for login to complete (longer timeout for 2FA verification)
         WebDriverWait(driver, 60).until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
-        
+
         _notify_user("[Naver] ✅ Login successful", "success")
         return driver  # Return the logged-in driver
         
