@@ -83,6 +83,9 @@ user_pw = get_secret("NAVER_PW")
 
 # Step 1: Fetch class list from ACA2000 (login + scrape class names, keep driver alive)
 if st.button("🔍 Fetch Classes from ACA2000"):
+    # Clear previous logs
+    st.session_state.process_logs = []
+
     # Clean up any stale driver from previous run
     if "aca_driver" in st.session_state and st.session_state.aca_driver:
         try:
@@ -97,15 +100,32 @@ if st.button("🔍 Fetch Classes from ACA2000"):
             if class_info and driver:
                 st.session_state.class_info = class_info
                 st.session_state.aca_driver = driver
+                st.session_state.fetch_status = f"✅ Found {len(class_info)} classes!"
                 try:
                     driver.minimize_window()  # Only works in non-headless mode
                 except Exception:
                     pass
-                status.update(label=f"✅ Found {len(class_info)} classes!", state="complete", expanded=False)
+                status.update(label=st.session_state.fetch_status, state="complete", expanded=False)
             else:
-                status.update(label="❌ No classes found or connection failed.", state="error", expanded=False)
+                st.session_state.fetch_status = "❌ No classes found or connection failed."
+                status.update(label=st.session_state.fetch_status, state="error", expanded=False)
         except Exception as e:
-            status.update(label=f"❌ Error: {e}", state="error", expanded=False)
+            st.session_state.fetch_status = f"❌ Error: {e}"
+            status.update(label=st.session_state.fetch_status, state="error", expanded=False)
+
+# Show persistent logs from all steps
+if "process_logs" in st.session_state and st.session_state.process_logs:
+    with st.expander("📋 Process Logs", expanded=False):
+        for log in st.session_state.process_logs:
+            msg, msg_type = log["message"], log["type"]
+            if msg_type == "error":
+                st.error(msg)
+            elif msg_type == "success":
+                st.success(msg)
+            elif msg_type == "warning":
+                st.warning(msg)
+            else:
+                st.info(msg)
 
 # Step 2: Select classes, fetch students + emails, and compare
 if "class_info" in st.session_state and st.session_state.class_info:
@@ -159,9 +179,14 @@ if "class_info" in st.session_state and st.session_state.class_info:
                     st.stop()
                 student_list = get_students_for_classes(driver, selected_class_ids)
                 # Driver is now quit by get_students_for_classes
+                total_students = sum(len(s) for s in student_list.values())
                 st.write(
-                    f"✅ Found {sum(len(s) for s in student_list.values())} students in {len(student_list)} classes"
+                    f"✅ Found {total_students} students in {len(student_list)} classes"
                 )
+
+                if total_students == 0:
+                    st.warning("⚠️ No students found in selected classes. Check ACA2000 data.")
+                    st.stop()
 
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
