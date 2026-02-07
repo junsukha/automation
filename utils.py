@@ -1853,7 +1853,14 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         id_input = wait.until(EC.presence_of_element_located((By.ID, "id")))
         id_input.click()
         time.sleep(random.uniform(0.3, 0.8))
-        driver.execute_script("arguments[0].value = arguments[1];", id_input, _id)
+        # Set value and dispatch events to trigger Naver's JS handlers
+        driver.execute_script("""
+            var el = arguments[0];
+            el.value = arguments[1];
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        """, id_input, _id)
 
         # Random delay between fields
         time.sleep(random.uniform(0.5, 1.2))
@@ -1861,9 +1868,15 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         _notify_user("[Naver] Step 3: Entering password...", "info")
         # Wait for password input to be present and interactable
         pw_input = wait.until(EC.presence_of_element_located((By.ID, "pw")))
-        driver.execute_script("arguments[0].value = arguments[1];", pw_input, _pw)
         pw_input.click()
         time.sleep(random.uniform(0.3, 0.8))
+        driver.execute_script("""
+            var el = arguments[0];
+            el.value = arguments[1];
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        """, pw_input, _pw)
 
         # Random delay before clicking login
         time.sleep(random.uniform(0.5, 1.5))
@@ -1872,6 +1885,15 @@ def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_pas
         # Wait for login button to be clickable
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
         login_button.click()
+
+        # Check for error messages after a short delay
+        time.sleep(2)
+        try:
+            error_elem = driver.find_element(By.ID, "err_common")
+            if error_elem and error_elem.is_displayed():
+                _notify_user(f"[Naver] ⚠️ Login error: {error_elem.text}", "error")
+        except Exception:
+            pass
 
         _notify_user("[Naver] Step 5: Waiting for login to complete...", "info")
         # Wait for login to complete (longer timeout for 2FA verification)
