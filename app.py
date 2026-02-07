@@ -184,9 +184,10 @@ if "class_info" in st.session_state and st.session_state.class_info:
                     f"✅ Found {total_students} students in {len(student_list)} classes"
                 )
 
-                if total_students == 0:
-                    st.warning("⚠️ No students found in selected classes. Check ACA2000 data.")
-                    st.stop()
+                # TODO: Uncomment this check after verifying Naver login works
+                # if total_students == 0:
+                #     st.warning("⚠️ No students found in selected classes. Check ACA2000 data.")
+                #     st.stop()
 
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
