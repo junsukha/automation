@@ -1866,6 +1866,7 @@ def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
         driver.execute_script(f"document.getElementsByName('pw')[0].value='{_pw}'")
 
         # Click login button
+        _notify_user("[Naver] Step 3: Clicking login button...", "info")
         driver.find_element(By.ID, "log.login").click()
         time.sleep(3)
 
