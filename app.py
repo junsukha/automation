@@ -192,7 +192,7 @@ if "class_info" in st.session_state and st.session_state.class_info:
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
                 emails = fetch_naver_email(
-                    headless=True, naver_id=user_email_id, naver_passkey=user_pw
+                    headless=False, naver_id=user_email_id, naver_passkey=user_pw
                 )
                 senders = {e["sender"] for e in emails}
                 st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
