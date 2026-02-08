@@ -1279,15 +1279,42 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
 def get_headless_stealth_driver():
     """
     Creates a headless Chrome WebDriver with stealth settings to avoid detection.
+    Uses undetected-chromedriver which patches Chrome to avoid bot detection.
+    Falls back to regular selenium with stealth if undetected-chromedriver fails.
     Returns:
         webdriver.Chrome: Configured headless Chrome WebDriver.
     """
+    import shutil
+    from selenium_stealth import stealth
+
+    # Try undetected-chromedriver first
+    try:
+        import undetected_chromedriver as uc
+
+        options = uc.ChromeOptions()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-extensions")
+
+        # Use system chrome binary if available (Streamlit Cloud)
+        system_chrome = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
+        if system_chrome:
+            options.binary_location = system_chrome
+
+        driver = uc.Chrome(options=options, headless=True, use_subprocess=False)
+        _notify_user("[Naver] Using undetected-chromedriver", "info")
+        return driver
+
+    except Exception as e:
+        _notify_user(f"[Naver] undetected-chromedriver failed ({e}), falling back to selenium-stealth", "warning")
+
+    # Fallback to regular selenium with stealth
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    
-    # Options to prevent zombie processes
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-software-rasterizer")
@@ -1297,9 +1324,8 @@ def get_headless_stealth_driver():
     options.add_argument("--disable-renderer-backgrounding")
     options.add_argument("--disable-features=TranslateUI")
     options.add_argument("--disable-ipc-flooding-protection")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    # Use system chromedriver if available (Streamlit Cloud), otherwise default
-    import shutil
     system_chromedriver = shutil.which("chromedriver")
     if system_chromedriver:
         from selenium.webdriver.chrome.service import Service
@@ -1307,7 +1333,6 @@ def get_headless_stealth_driver():
     else:
         driver = webdriver.Chrome(options=options)
 
-    # This is the magic part that hides the headless mode from Naver
     stealth(driver,
         languages=["en-US", "en"],
         vendor="Google Inc.",
@@ -1369,12 +1394,11 @@ def find_missing_students(student_dict, emails):
     return results
 
 
-def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passkey=None):
+def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
     """
     Fetches Naver email using Selenium WebDriver.
     Parameters:
         headless (bool): Whether to run the browser in headless mode.
-        stealth (bool): Whether to use stealth mode to avoid bot detection.
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
     Returns:
@@ -1488,10 +1512,9 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
         return sorted(names)
     
     # Step 1: Login to Naver using the reusable function
-    driver = login_naver_selenium( # this driver has already logged in
-        headless=headless, 
-        stealth=stealth, 
-        naver_id=naver_id, 
+    driver = login_naver_selenium(
+        headless=headless,
+        naver_id=naver_id,
         naver_passkey=naver_passkey
     )
     
@@ -1797,105 +1820,56 @@ def fetch_naver_email(headless=False, stealth=False, naver_id=None, naver_passke
     
 
 
-# TODO:https://www.luck7owl.com/it/python/selenium-%EB%84%A4%EC%9D%B4%EB%B2%84-%EB%A1%9C%EA%B7%B8%EC%9D%B8headless%EB%AA%A8%EB%93%9C/
-def login_naver_selenium(headless=False, stealth=False, naver_id=None, naver_passkey=None):
+def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
     """
     Logs into Naver using Selenium WebDriver and returns the driver.
 
     Parameters:
         headless (bool): Whether to run the browser in headless mode.
-        stealth (bool): Whether to use stealth mode to avoid bot detection.
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
 
     Returns:
         webdriver: Logged-in Chrome WebDriver instance, or None if login failed.
     """
-
-
+    import shutil
 
     _id = naver_id if naver_id else st.secrets.get("NAVER_ID")
     _pw = naver_passkey if naver_passkey else st.secrets.get("NAVER_PW")
 
-    # Use stealth mode if requested and headless
-    if headless and stealth:
-        driver = get_headless_stealth_driver()
-    else:
-        options = Options()
-        if headless:
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-        options.add_argument(
-            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-        )
-        # Use system chromedriver if available (Streamlit Cloud), otherwise default
-        import shutil
-        system_chromedriver = shutil.which("chromedriver")
-        if system_chromedriver:
-            from selenium.webdriver.chrome.service import Service
-            driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
-        else:
-            driver = webdriver.Chrome(options=options)
+    options = Options()
+    if headless:
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+    options.add_argument(
+        'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    )
 
-    wait = WebDriverWait(driver, 10)  # Wait up to 10 seconds
-    
+    # Use system chromedriver if available (Streamlit Cloud), otherwise default
+    system_chromedriver = shutil.which("chromedriver")
+    if system_chromedriver:
+        from selenium.webdriver.chrome.service import Service
+        driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
+
     try:
         _notify_user("[Naver] Step 1: Opening login page...", "info")
         driver.get("https://nid.naver.com/nidlogin.login")
-
-        # Random delay to appear more human-like
-        time.sleep(random.uniform(1.0, 2.5))
-
-        _notify_user("[Naver] Step 2: Entering ID...", "info")
-        # Wait for ID input to be present and interactable
-        id_input = wait.until(EC.presence_of_element_located((By.ID, "id")))
-        id_input.click()
-        time.sleep(random.uniform(0.3, 0.8))
-        # Set value and dispatch events to trigger Naver's JS handlers
-        driver.execute_script("""
-            var el = arguments[0];
-            el.value = arguments[1];
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-        """, id_input, _id)
-
-        # Random delay between fields
-        time.sleep(random.uniform(0.5, 1.2))
-
-        _notify_user("[Naver] Step 3: Entering password...", "info")
-        # Wait for password input to be present and interactable
-        pw_input = wait.until(EC.presence_of_element_located((By.ID, "pw")))
-        pw_input.click()
-        time.sleep(random.uniform(0.3, 0.8))
-        driver.execute_script("""
-            var el = arguments[0];
-            el.value = arguments[1];
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-        """, pw_input, _pw)
-
-        # Random delay before clicking login
-        time.sleep(random.uniform(0.5, 1.5))
-
-        _notify_user("[Naver] Step 4: Clicking login button...", "info")
-        # Wait for login button to be clickable
-        login_button = wait.until(EC.element_to_be_clickable((By.ID, "log.login")))
-        login_button.click()
-
-        # Check for error messages after a short delay
         time.sleep(2)
-        try:
-            error_elem = driver.find_element(By.ID, "err_common")
-            if error_elem and error_elem.is_displayed():
-                _notify_user(f"[Naver] ⚠️ Login error: {error_elem.text}", "error")
-        except Exception:
-            pass
 
-        _notify_user("[Naver] Step 5: Waiting for login to complete...", "info")
+        _notify_user("[Naver] Step 2: Entering credentials...", "info")
+        # Simple JS injection - same approach as working test_naver_login.py
+        driver.execute_script(f"document.getElementsByName('id')[0].value='{_id}'")
+        driver.execute_script(f"document.getElementsByName('pw')[0].value='{_pw}'")
+
+        # Click login button
+        driver.find_element(By.ID, "log.login").click()
+        time.sleep(3)
+
+        _notify_user("[Naver] Step 4: Waiting for login to complete...", "info")
         # Wait for login to complete (longer timeout for 2FA verification)
         WebDriverWait(driver, 60).until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
 
