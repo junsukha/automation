@@ -33,13 +33,7 @@ jobs:
 
       - name: Build executable
         working-directory: desktop_app
-        run: |
-          pyinstaller --onefile --windowed \
-            --name "AcademyAutomation" \
-            --hidden-import=selenium \
-            --hidden-import=webdriver_manager \
-            --hidden-import=dearpygui \
-            main.py
+        run: pyinstaller --onefile --windowed --name "AcademyAutomation" --hidden-import=selenium --hidden-import=webdriver_manager --hidden-import=dearpygui main.py
 
       - name: Create macOS .app bundle
         if: runner.os == 'macOS'
