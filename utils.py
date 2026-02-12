@@ -1,6 +1,11 @@
 # import smtplib
 from email.message import EmailMessage
-import streamlit as st
+
+# Make streamlit optional (for desktop app that doesn't need it)
+try:
+    import streamlit as st
+except ImportError:
+    st = None
 
 import smtplib
 import ssl
@@ -68,6 +73,11 @@ def _get_secret(key, default=""):
     Get secret from Streamlit secrets or secrets.toml file.
     Works both in Streamlit context and when running directly.
     """
+    # If streamlit not available, use secrets.toml
+    if st is None:
+        secrets = _load_secrets_toml()
+        return secrets.get(key, default)
+
     # Try Streamlit secrets first (when running in Streamlit)
     try:
         return st.secrets.get(key, default)
@@ -85,6 +95,11 @@ def _notify_user(message, message_type="error"):
         message (str): Message to display
         message_type (str): Type of message - "error", "success", "warning", or "info"
     """
+    # If streamlit not available, just print
+    if st is None:
+        print(message)
+        return
+
     try:
         # Store in session_state for persistence
         if "process_logs" not in st.session_state:
@@ -442,20 +457,11 @@ def get_class_list_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, u
         aca2000_url = "https://t.aca2000.co.kr/"
 
     if not cust_num:
-        try:
-            cust_num = st.secrets.get("ACA2000_CUST_NUM", "")
-        except Exception:
-            cust_num = os.getenv("ACA2000_CUST_NUM", "")
+        cust_num = _get_secret("ACA2000_CUST_NUM", os.getenv("ACA2000_CUST_NUM", ""))
     if not user_id:
-        try:
-            user_id = st.secrets.get("ACA2000_USER_ID", "")
-        except Exception:
-            user_id = os.getenv("ACA2000_USER_ID", "")
+        user_id = _get_secret("ACA2000_USER_ID", os.getenv("ACA2000_USER_ID", ""))
     if not user_pw:
-        try:
-            user_pw = st.secrets.get("ACA2000_USER_PW", "")
-        except Exception:
-            user_pw = os.getenv("ACA2000_USER_PW", "")
+        user_pw = _get_secret("ACA2000_USER_PW", os.getenv("ACA2000_USER_PW", ""))
 
     if not all([cust_num, user_id, user_pw]):
         _notify_user("❌ ACA2000 credentials (CUST_NUM, USER_ID, USER_PW) must be set", "error")
@@ -789,22 +795,11 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
     
     # Get credentials from secrets if not provided
     if not cust_num:
-        try:
-            cust_num = st.secrets.get("ACA2000_CUST_NUM", "")
-        except Exception:
-            cust_num = os.getenv("ACA2000_CUST_NUM", "")
-    
+        cust_num = _get_secret("ACA2000_CUST_NUM", os.getenv("ACA2000_CUST_NUM", ""))
     if not user_id:
-        try:
-            user_id = st.secrets.get("ACA2000_USER_ID", "")
-        except Exception:
-            user_id = os.getenv("ACA2000_USER_ID", "")
-    
+        user_id = _get_secret("ACA2000_USER_ID", os.getenv("ACA2000_USER_ID", ""))
     if not user_pw:
-        try:
-            user_pw = st.secrets.get("ACA2000_USER_PW", "")
-        except Exception:
-            user_pw = os.getenv("ACA2000_USER_PW", "")
+        user_pw = _get_secret("ACA2000_USER_PW", os.getenv("ACA2000_USER_PW", ""))
     
     if not all([cust_num, user_id, user_pw]):
         _notify_user("❌ ACA2000 credentials (CUST_NUM, USER_ID, USER_PW) must be set", "error")
@@ -1834,8 +1829,8 @@ def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
     """
     import shutil
 
-    _id = naver_id if naver_id else st.secrets.get("NAVER_ID")
-    _pw = naver_passkey if naver_passkey else st.secrets.get("NAVER_PW")
+    _id = naver_id if naver_id else _get_secret("NAVER_ID")
+    _pw = naver_passkey if naver_passkey else _get_secret("NAVER_PW")
 
     options = Options()
     if headless:
@@ -2077,8 +2072,8 @@ if __name__ == "__main__":
     
     # test fetch_naver_email
     # use stealit.secrets to get the credentials
-    naver_id = st.secrets.get("NAVER_ID")
-    naver_passkey = st.secrets.get("NAVER_PW")
+    naver_id = _get_secret("NAVER_ID")
+    naver_passkey = _get_secret("NAVER_PW")
     fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
 
 

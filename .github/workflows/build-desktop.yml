@@ -1,0 +1,81 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop_app/**'
+      - 'utils.py'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller selenium webdriver-manager dearpygui imap-tools python-dotenv
+
+      - name: Copy utils.py
+        run: cp utils.py desktop_app/utils.py
+
+      - name: Build executable
+        working-directory: desktop_app
+        run: |
+          pyinstaller --onefile --windowed \
+            --name "AcademyAutomation" \
+            --hidden-import=selenium \
+            --hidden-import=webdriver_manager \
+            --hidden-import=dearpygui \
+            main.py
+
+      - name: Create macOS .app bundle
+        if: runner.os == 'macOS'
+        working-directory: desktop_app
+        run: |
+          mkdir -p dist/AcademyAutomation.app/Contents/MacOS
+          mkdir -p dist/AcademyAutomation.app/Contents/Resources
+          mv dist/AcademyAutomation dist/AcademyAutomation.app/Contents/MacOS/
+          cp config.json dist/AcademyAutomation.app/Contents/MacOS/
+          cat > dist/AcademyAutomation.app/Contents/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>AcademyAutomation</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.academy.automation</string>
+              <key>CFBundleName</key>
+              <string>Academy Automation</string>
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Copy config for Windows
+        if: runner.os == 'Windows'
+        working-directory: desktop_app
+        run: cp config.json dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AcademyAutomation-${{ runner.os }}
+          path: |
+            desktop_app/dist/
