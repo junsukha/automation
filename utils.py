@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 
 import os
 from dotenv import load_dotenv
+load_dotenv()
 try:
     import toml
 except ImportError:
@@ -1389,13 +1390,15 @@ def find_missing_students(student_dict, emails):
     return results
 
 
-def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
+def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None, start_date=None, end_date=None):
     """
     Fetches Naver email using Selenium WebDriver.
     Parameters:
         headless (bool): Whether to run the browser in headless mode.
         naver_id (str): Naver login ID.
         naver_passkey (str): Naver login password or app password.
+        start_date (datetime.date): Start date for email filtering (inclusive). Defaults to 7 days ago.
+        end_date (datetime.date): End date for email filtering (inclusive). Defaults to today.
     Returns:
         list: List of dicts with sender, subject, content, and attachments from recent emails
               Example: [{"sender": "example@naver.com", "subject": "Hello", "content": "...", "attachments": ["a.pdf"]}, ...]
@@ -1520,14 +1523,14 @@ def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
     
     try:
         # Add random delay to appear more human-like
-        time.sleep(random.uniform(1.5, 3.0))
+        time.sleep(random.uniform(1.5, 2.0))
 
         # Step 2: Navigate to Naver Mail
         _notify_user("[Naver] Navigating to mail...", "info")
         driver.get("https://mail.naver.com/")
 
         # Random delay after navigation
-        time.sleep(random.uniform(2.0, 4.0))
+        time.sleep(random.uniform(1.5, 2.0))
 
         # Wait for mail list to load (using actual Naver Mail structure)
         wait.until(EC.presence_of_element_located((
@@ -1541,7 +1544,7 @@ def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
                 By.CSS_SELECTOR, "a.mailbox_label[title='전체메일']"
             )
             all_mail_link.click()
-            time.sleep(random.uniform(1.5, 2.5))
+            time.sleep(random.uniform(1.5, 2.5)) # to avoid bot detection
             wait.until(EC.presence_of_element_located((
                 By.CSS_SELECTOR,
                 "ol.mail_list, #mail_list_wrap, li.mail_item"
@@ -1558,9 +1561,11 @@ def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
         # Keep track of all processed email IDs across pages
         processed_mail_ids = []
 
-        # Only process emails from today (for testing; change to timedelta(days=7) for production)
-        # date_limit = datetime.now().date()
-        date_limit = (datetime.now() - timedelta(days=2)).date()
+        # Date range for filtering emails
+        if start_date is None or end_date is None:
+            start_date = (datetime.now() - timedelta(days=7)).date()
+            end_date = datetime.now().date()
+        _notify_user(f"[Naver] Fetching emails from {start_date} to {end_date}", "info")
         date_limit_reached = False
         page_num = 1
 
@@ -1593,10 +1598,12 @@ def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None):
                         else:
                             # Time only (e.g. "오후 03:32") means today
                             mail_date = datetime.now().date()
-                        if mail_date < date_limit:
-                            _notify_user(f"[Naver] Reached emails older than date limit ({date_text}), stopping", "info")
+                        if mail_date < start_date:
+                            _notify_user(f"[Naver] Reached emails older than start date ({date_text}), stopping", "info")
                             date_limit_reached = True
                             break
+                        if mail_date > end_date:
+                            continue  # Skip emails newer than end_date
                     except Exception:
                         pass  # If date extraction fails, process the email anyway
 
@@ -1829,8 +1836,8 @@ def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
     """
     import shutil
 
-    _id = naver_id if naver_id else _get_secret("NAVER_ID")
-    _pw = naver_passkey if naver_passkey else _get_secret("NAVER_PW")
+    _id = naver_id if naver_id else _get_secret("NAVER_ID", os.getenv("NAVER_ID"))
+    _pw = naver_passkey if naver_passkey else _get_secret("NAVER_PW", os.getenv("NAVER_PW"))
 
     options = Options()
     if headless:
@@ -2072,8 +2079,8 @@ if __name__ == "__main__":
     
     # test fetch_naver_email
     # use stealit.secrets to get the credentials
-    naver_id = _get_secret("NAVER_ID")
-    naver_passkey = _get_secret("NAVER_PW")
+    naver_id = _get_secret("NAVER_ID", os.getenv("NAVER_ID"))
+    naver_passkey = _get_secret("NAVER_PW", os.getenv("NAVER_PW"))
     fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
 
 
