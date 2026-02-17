@@ -1,12 +1,7 @@
 name: Build Desktop App
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'desktop_app/**'
-      - 'utils.py'
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
   build:
