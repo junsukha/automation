@@ -128,10 +128,6 @@ def run_automation_callback():
         log("Please select at least one class.")
         return
 
-    if not config.get("NAVER_ID") or not config.get("NAVER_PW"):
-        log("Naver credentials not found in config.json!")
-        return
-
     dpg.disable_item("fetch_btn")
     dpg.disable_item("run_btn")
 
@@ -155,6 +151,12 @@ def run_automation_callback():
 
         student_list = _load_utils().get_students_for_classes(driver, selected_class_ids)
         total_students = sum(len(s) for s in student_list.values())
+
+        if total_students == 0:
+            log("No students found. Check ACA2000 data or selected classes.")
+            set_status("No students found.")
+            return
+        
         log(f"Found {total_students} students in {len(student_list)} classes")
 
         # Fetch Naver emails
@@ -172,8 +174,8 @@ def run_automation_callback():
 
         emails = _load_utils().fetch_naver_email(
             headless=False,
-            naver_id=config["NAVER_ID"],
-            naver_passkey=config["NAVER_PW"],
+            naver_id=config.get("NAVER_ID"),
+            naver_passkey=config.get("NAVER_PW"),
             start_date=sd,
             end_date=ed
         )
