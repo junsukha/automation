@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "dearpygui>=2.2",
     "dotenv>=0.9.9",
     "imap-tools>=1.11.0",
     "pykakao>=0.0.7",
