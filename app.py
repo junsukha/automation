@@ -3,6 +3,7 @@ import streamlit as st
 import sys
 import os
 import time
+from datetime import datetime, timedelta
 from utils import (
     get_class_list_from_aca2000,
     get_students_for_classes,
@@ -148,6 +149,12 @@ if "class_info" in st.session_state and st.session_state.class_info:
                 key=f"class_{class_name}",
             )
 
+        # Date range for email filtering
+        st.write("**Email Date Range:**")
+        date_cols = st.columns(2)
+        email_start_date = date_cols[0].date_input("Start Date", value=datetime.now().date() - timedelta(days=7))
+        email_end_date = date_cols[1].date_input("End Date", value=datetime.now().date())
+
         # Submit button
         submitted = st.form_submit_button("🚀 Find lazy students from Selected Classes")
 
@@ -192,7 +199,8 @@ if "class_info" in st.session_state and st.session_state.class_info:
                 # Fetch unread emails via Selenium (subject, content, attachments)
                 st.write("Reading Naver emails...")
                 emails = fetch_naver_email(
-                    headless=False, naver_id=user_email_id, naver_passkey=user_pw
+                    headless=False, naver_id=user_email_id, naver_passkey=user_pw,
+                    start_date=email_start_date, end_date=email_end_date
                 )
                 senders = {e["sender"] for e in emails}
                 st.write(f"✅ Found {len(emails)} emails from {len(senders)} senders.")
