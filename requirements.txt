@@ -3,6 +3,5 @@ imap-tools
 selenium
 webdriver-manager
 python-dotenv
-selenium-stealth
 undetected-chromedriver
 PyKakao

@@ -13,6 +13,12 @@ import ssl
 from imap_tools import MailBox, AND
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import random
+import re
+import shutil
 
 import os
 from dotenv import load_dotenv
@@ -36,8 +42,6 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from selenium.webdriver.chrome.options import Options
 import random
-
-from selenium_stealth import stealth
 
 from PyKakao import Message  # Import PyKakao
 
@@ -226,29 +230,25 @@ def _make_driver_read_only(driver):
         pass  # Ignore if script fails
 
 @contextmanager
-def get_driver_context(headless=False, stealth=False, read_only=True):
+def get_driver_context(headless=False, read_only=True):
     """
     Context manager for WebDriver that ensures proper cleanup.
-    
+
     Usage:
         with get_driver_context(headless=True) as driver:
             driver.get("https://example.com")
             # driver is automatically closed when exiting the context
-    
+
     Args:
         headless (bool): Whether to run in headless mode
-        stealth (bool): Whether to use stealth mode (for headless)
         read_only (bool): Whether to enable read-only mode (prevents modifications, default: True)
-    
+
     Yields:
         webdriver.Chrome: Configured Chrome WebDriver
     """
     driver = None
     try:
         if headless:
-            if stealth:
-                driver = get_headless_stealth_driver()
-            else:
                 options = webdriver.ChromeOptions()
                 options.add_argument("--headless=new")
                 options.add_argument("--no-sandbox")
@@ -1272,73 +1272,6 @@ def get_students_from_aca2000(aca2000_url=None, cust_num=None, user_id=None, use
 #     return driver
 
 
-def get_headless_stealth_driver():
-    """
-    Creates a headless Chrome WebDriver with stealth settings to avoid detection.
-    Uses undetected-chromedriver which patches Chrome to avoid bot detection.
-    Falls back to regular selenium with stealth if undetected-chromedriver fails.
-    Returns:
-        webdriver.Chrome: Configured headless Chrome WebDriver.
-    """
-    import shutil
-    from selenium_stealth import stealth
-
-    # Try undetected-chromedriver first
-    try:
-        import undetected_chromedriver as uc
-
-        options = uc.ChromeOptions()
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--disable-extensions")
-
-        # Use system chrome binary if available (Streamlit Cloud)
-        system_chrome = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
-        if system_chrome:
-            options.binary_location = system_chrome
-
-        driver = uc.Chrome(options=options, headless=True, use_subprocess=False)
-        _notify_user("[Naver] Using undetected-chromedriver", "info")
-        return driver
-
-    except Exception as e:
-        _notify_user(f"[Naver] undetected-chromedriver failed ({e}), falling back to selenium-stealth", "warning")
-
-    # Fallback to regular selenium with stealth
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-features=TranslateUI")
-    options.add_argument("--disable-ipc-flooding-protection")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-    system_chromedriver = shutil.which("chromedriver")
-    if system_chromedriver:
-        from selenium.webdriver.chrome.service import Service
-        driver = webdriver.Chrome(service=Service(system_chromedriver), options=options)
-    else:
-        driver = webdriver.Chrome(options=options)
-
-    stealth(driver,
-        languages=["en-US", "en"],
-        vendor="Google Inc.",
-        platform="Win32",
-        webgl_vendor="Intel Inc.",
-        renderer="Intel Iris OpenGL Engine",
-        fix_hairline=True,
-    )
-
-    return driver
 
 def find_missing_students(student_dict, emails):
     """
@@ -1403,11 +1336,7 @@ def fetch_naver_email(headless=False, naver_id=None, naver_passkey=None, start_d
         list: List of dicts with sender, subject, content, and attachments from recent emails
               Example: [{"sender": "example@naver.com", "subject": "Hello", "content": "...", "attachments": ["a.pdf"]}, ...]
     """
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    import random
-    import re
+
 
     email_list = []
 
@@ -1834,7 +1763,7 @@ def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
     Returns:
         webdriver: Logged-in Chrome WebDriver instance, or None if login failed.
     """
-    import shutil
+
 
     _id = naver_id if naver_id else _get_secret("NAVER_ID", os.getenv("NAVER_ID"))
     _pw = naver_passkey if naver_passkey else _get_secret("NAVER_PW", os.getenv("NAVER_PW"))
@@ -1892,7 +1821,7 @@ def login_naver_selenium(headless=False, naver_id=None, naver_passkey=None):
         return None
 
 # test using webdriver before implementing aca2000 logics
-def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=None):
+def login_to_naver(headless=False, naver_id=None, naver_passkey=None):
     """
     Logs into Naver using Selenium WebDriver.
     Parameters:
@@ -1901,7 +1830,7 @@ def login_to_naver(headless=False, stealth=False, naver_id=None, naver_passkey=N
         naver_passkey (str): Naver login password or app password.
     """    
     # Disable read-only mode for login (we need to submit the form)
-    with get_driver_context(headless=headless, stealth=stealth, read_only=False) as driver:
+    with get_driver_context(headless=headless, read_only=False) as driver:
         # Set a max wait time of 10 seconds
         wait = WebDriverWait(driver, 10)
         try:
@@ -2081,6 +2010,6 @@ if __name__ == "__main__":
     # use stealit.secrets to get the credentials
     naver_id = _get_secret("NAVER_ID", os.getenv("NAVER_ID"))
     naver_passkey = _get_secret("NAVER_PW", os.getenv("NAVER_PW"))
-    fetch_naver_email(headless=False, stealth=False, naver_id=naver_id, naver_passkey=naver_passkey)
+    fetch_naver_email(headless=False, naver_id=naver_id, naver_passkey=naver_passkey)
 
 

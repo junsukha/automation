@@ -11,7 +11,6 @@ dependencies = [
     "pykakao>=0.0.7",
     "ruff>=0.14.11",
     "selenium>=4.39.0",
-    "selenium-stealth>=1.0.6",
     "streamlit>=1.52.2",
     "webdriver-manager>=4.0.2",
 ]
