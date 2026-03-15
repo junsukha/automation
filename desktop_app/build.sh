@@ -13,7 +13,7 @@ echo "Building executable..."
 uv run --with pyinstaller --with selenium --with webdriver-manager --with dearpygui --with imap-tools --with python-dotenv \
     pyinstaller --onedir --windowed -y \
     --name "AcademyAutomation" \
-    --hidden-import=selenium \
+    --collect-submodules=selenium \
     --hidden-import=webdriver_manager \
     --hidden-import=dearpygui \
     main.py
