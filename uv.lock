@@ -322,7 +322,6 @@ dependencies = [
     { name = "pykakao" },
     { name = "ruff" },
     { name = "selenium" },
-    { name = "selenium-stealth" },
     { name = "streamlit" },
     { name = "webdriver-manager" },
 ]
@@ -335,7 +334,6 @@ requires-dist = [
     { name = "pykakao", specifier = ">=0.0.7" },
     { name = "ruff", specifier = ">=0.14.11" },
     { name = "selenium", specifier = ">=4.39.0" },
-    { name = "selenium-stealth", specifier = ">=1.0.6" },
     { name = "streamlit", specifier = ">=1.52.2" },
     { name = "webdriver-manager", specifier = ">=4.0.2" },
 ]
@@ -770,17 +768,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/af/19/27c1bf9eb1f7025632d35a956b50746efb4b10aa87f961b263fa7081f4c5/selenium-4.39.0.tar.gz", hash = "sha256:12f3325f02d43b6c24030fc9602b34a3c6865abbb1db9406641d13d108aa1889", size = 928575, upload-time = "2025-12-06T23:12:34.896Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/d0/55a6b7c6f35aad4c8a54be0eb7a52c1ff29a59542fc3e655f0ecbb14456d/selenium-4.39.0-py3-none-any.whl", hash = "sha256:c85f65d5610642ca0f47dae9d5cc117cd9e831f74038bc09fe1af126288200f9", size = 9655249, upload-time = "2025-12-06T23:12:33.085Z" },
-]
-
-[[package]]
-name = "selenium-stealth"
-version = "1.0.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "selenium" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/ac/7877df8b819d54a4e317a093a0a9e0a38d21d884a7250aa713f2f0869442/selenium_stealth-1.0.6-py3-none-any.whl", hash = "sha256:b62da5452aa4a84f29a4dfb21a9696aff20788a7c570dd0b81bc04a940848b97", size = 32195, upload-time = "2020-11-05T15:26:05.24Z" },
 ]
 
 [[package]]
